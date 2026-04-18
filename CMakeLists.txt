@@ -25,6 +25,9 @@ find_package(tf2_ros REQUIRED)
 find_package(pcl_ros REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(PCL REQUIRED)
+find_package(rcl_interfaces REQUIRED)
+find_package(message_filters REQUIRED)
+find_package(generate_parameter_library REQUIRED)
 
 set(dependencies
   rclcpp
@@ -39,6 +42,7 @@ set(dependencies
   pcl_ros
   Eigen3
   PCL
+  rcl_interfaces
 )
 
 
@@ -53,11 +57,23 @@ remove_definitions(-DDISABLE_LIBUSB-1.0)
 ## Specify additional locations of header files
 ## Your package locations should be listed before other locations
 
+generate_parameter_library(laserscan_multi_merger_parameter param/laserscan_multi_merger_parameters.yaml)
+
 add_executable(laserscan_multi_merger src/laserscan_multi_merger.cpp)
-ament_target_dependencies(laserscan_multi_merger ${dependencies})
-target_include_directories(laserscan_multi_merger PUBLIC ${EIGEN_INCLUDE_DIRS})
-target_include_directories(laserscan_multi_merger PUBLIC ${PCL_INCLUDE_DIRS})
-target_link_libraries(laserscan_multi_merger ${PCL_LIBRARIES})
+ament_target_dependencies(laserscan_multi_merger
+  rclcpp
+  sensor_msgs
+  tf2
+  tf2_ros
+  rcl_interfaces
+  message_filters
+)
+
+target_link_libraries(laserscan_multi_merger
+  rclcpp::rclcpp
+  tf2::tf2
+  tf2_ros::tf2_ros
+)
 
 add_executable(laserscan_virtualizer src/laserscan_virtualizer.cpp)
 ament_target_dependencies(laserscan_virtualizer ${dependencies})

@@ -1,62 +1,66 @@
-#include <Eigen/Dense>
-#include <laser_geometry/laser_geometry.hpp>
-#include <pcl/io/pcd_io.h>
-#include <pcl/point_cloud.h>
-#include <pcl/point_types.h>
-#include <pcl_conversions/pcl_conversions.h>
-#include <string.h>
-#include <tf2/exceptions.h>
-#include <tf2_ros/buffer.h>
-#include <tf2_ros/transform_listener.h>
+#include <cmath>
+#include <cstring>
+#include <functional>
+#include <iterator>
+#include <limits>
+#include <map>
+#include <set>
+#include <sstream>
+#include <string>
 #include <vector>
 
-#include "pcl_ros/transforms.hpp"
+#include "message_filters/subscriber.h"
+#include "message_filters/time_synchronizer.h"
 #include "rcl_interfaces/msg/set_parameters_result.hpp"
 #include "rclcpp/rclcpp.hpp"
-
 #include "sensor_msgs/msg/laser_scan.hpp"
 #include "sensor_msgs/msg/point_cloud2.hpp"
-
-using namespace std;
-using namespace pcl;
+#include "sensor_msgs/msg/point_field.hpp"
+#include "tf2/LinearMath/Quaternion.h"
+#include "tf2/LinearMath/Transform.h"
+#include "tf2/exceptions.h"
+#include "tf2_ros/buffer.h"
+#include "tf2_ros/message_filter.h"
+#include "tf2_ros/transform_listener.h"
 
 class LaserscanMerger : public rclcpp::Node
 {
 public:
     LaserscanMerger();
-    void scanCallback(const sensor_msgs::msg::LaserScan::SharedPtr scan, std::string topic);
-    void pointcloud_to_laserscan(Eigen::MatrixXf points, pcl::PCLPointCloud2* merged_cloud);
-    rcl_interfaces::msg::SetParametersResult reconfigureCallback(const std::vector<rclcpp::Parameter>& parameters);
 
 private:
-    rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr dyn_params_handler_;
-    laser_geometry::LaserProjection projector_;
+    void scanFilterCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr scan, size_t index);
+    void publishMergedData();
+    rcl_interfaces::msg::SetParametersResult reconfigureCallback(const std::vector<rclcpp::Parameter>& parameters);
+    void laserscan_topic_parser();
+    bool computeTransform(const std::string& source_frame, const rclcpp::Time& stamp, tf2::Transform& out_transform);
+    void appendPointCloudPoint(std::vector<float>& points, const tf2::Vector3& point);
+
     std::unique_ptr<tf2_ros::Buffer> tf_buffer_;
-    std::shared_ptr<tf2_ros::TransformListener> tfListener_;
+    std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
     OnSetParametersCallbackHandle::SharedPtr param_callback_handle_;
 
     rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr point_cloud_publisher_;
     rclcpp::Publisher<sensor_msgs::msg::LaserScan>::SharedPtr laser_scan_publisher_;
-    std::vector<rclcpp::Subscription<sensor_msgs::msg::LaserScan>::SharedPtr> scan_subscribers;
-    std::vector<bool> clouds_modified;
 
-    std::vector<pcl::PCLPointCloud2> clouds;
-    std::vector<string> input_topics;
+    std::vector<std::shared_ptr<message_filters::Subscriber<sensor_msgs::msg::LaserScan>>> scan_subscribers_;
+    std::vector<std::shared_ptr<tf2_ros::MessageFilter<sensor_msgs::msg::LaserScan>>> scan_filters_;
+    std::vector<sensor_msgs::msg::LaserScan::ConstSharedPtr> filtered_scans_;
+    std::vector<bool> scan_ready_;
+    std::vector<std::string> input_topics_;
 
-    void laserscan_topic_parser();
+    double angle_min_;
+    double angle_max_;
+    double angle_increment_;
+    double time_increment_;
+    double scan_time_;
+    double range_min_;
+    double range_max_;
 
-    double angle_min;
-    double angle_max;
-    double angle_increment;
-    double time_increment;
-    double scan_time;
-    double range_min;
-    double range_max;
-
-    string destination_frame;
-    string cloud_destination_topic;
-    string scan_destination_topic;
-    string laserscan_topics;
+    std::string destination_frame_;
+    std::string cloud_destination_topic_;
+    std::string scan_destination_topic_;
+    std::string laserscan_topics_;
 };
 
 LaserscanMerger::LaserscanMerger() : Node("laserscan_multi_merger")
@@ -68,234 +72,281 @@ LaserscanMerger::LaserscanMerger() : Node("laserscan_multi_merger")
     this->declare_parameter("angle_min", -3.14);
     this->declare_parameter("angle_max", 3.14);
     this->declare_parameter("angle_increment", 0.0058);
+    this->declare_parameter("time_increment", 0.0);
     this->declare_parameter("scan_time", 0.0);
     this->declare_parameter("range_min", 0.0);
     this->declare_parameter("range_max", 25.0);
 
-    this->get_parameter("destination_frame", destination_frame);
-    this->get_parameter("cloud_destination_topic", cloud_destination_topic);
-    this->get_parameter("scan_destination_topic", scan_destination_topic);
-    this->get_parameter("laserscan_topics", laserscan_topics);
-    this->get_parameter("angle_min", angle_min);
-    this->get_parameter("angle_max", angle_max);
-    this->get_parameter("angle_increment", angle_increment);
-    this->get_parameter("scan_time", scan_time);
-    this->get_parameter("range_min", range_min);
-    this->get_parameter("range_max", range_max);
+    this->get_parameter("destination_frame", destination_frame_);
+    this->get_parameter("cloud_destination_topic", cloud_destination_topic_);
+    this->get_parameter("scan_destination_topic", scan_destination_topic_);
+    this->get_parameter("laserscan_topics", laserscan_topics_);
+    this->get_parameter("angle_min", angle_min_);
+    this->get_parameter("angle_max", angle_max_);
+    this->get_parameter("angle_increment", angle_increment_);
+    this->get_parameter("time_increment", time_increment_);
+    this->get_parameter("scan_time", scan_time_);
+    this->get_parameter("range_min", range_min_);
+    this->get_parameter("range_max", range_max_);
 
     param_callback_handle_ = this->add_on_set_parameters_callback(
         std::bind(&LaserscanMerger::reconfigureCallback, this, std::placeholders::_1));
 
     tf_buffer_ = std::make_unique<tf2_ros::Buffer>(this->get_clock());
-    tfListener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
+    tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
 
     this->laserscan_topic_parser();
 
-    point_cloud_publisher_ = this->create_publisher<sensor_msgs::msg::PointCloud2>(cloud_destination_topic.c_str(), rclcpp::SensorDataQoS());
-    laser_scan_publisher_ = this->create_publisher<sensor_msgs::msg::LaserScan>(scan_destination_topic.c_str(), rclcpp::SensorDataQoS());
+    point_cloud_publisher_ = this->create_publisher<sensor_msgs::msg::PointCloud2>(cloud_destination_topic_, rclcpp::SensorDataQoS());
+    laser_scan_publisher_ = this->create_publisher<sensor_msgs::msg::LaserScan>(scan_destination_topic_, rclcpp::SensorDataQoS());
 }
 
 rcl_interfaces::msg::SetParametersResult LaserscanMerger::reconfigureCallback(const std::vector<rclcpp::Parameter>& parameters)
 {
     rcl_interfaces::msg::SetParametersResult result;
+    result.successful = true;
 
-    for (auto parameter : parameters) {
+    for (const auto& parameter : parameters) {
         const auto& type = parameter.get_type();
         const auto& name = parameter.get_name();
 
-        // Make sure it is a double value
         if (type == rcl_interfaces::msg::ParameterType::PARAMETER_DOUBLE) {
             double value = parameter.as_double();
-
             if (name == "angle_min") {
-                this->angle_min = value;
+                angle_min_ = value;
             } else if (name == "angle_max") {
-                this->angle_max = value;
+                angle_max_ = value;
             } else if (name == "angle_increment") {
-                this->angle_increment = value;
+                angle_increment_ = value;
             } else if (name == "time_increment") {
-                this->time_increment = value;
+                time_increment_ = value;
             } else if (name == "scan_time") {
-                this->scan_time = value;
+                scan_time_ = value;
             } else if (name == "range_min") {
-                this->range_min = value;
+                range_min_ = value;
             } else if (name == "range_max") {
-                this->range_max = value;
+                range_max_ = value;
             }
         }
     }
 
-    result.successful = true;
     return result;
 }
 
 void LaserscanMerger::laserscan_topic_parser()
 {
-    // LaserScan topics to subscribe
-    std::map<std::string, std::vector<std::string>> topics;
+    std::istringstream iss(laserscan_topics_);
+    std::set<std::string> tokens;
+    std::copy(std::istream_iterator<std::string>(iss), std::istream_iterator<std::string>(), std::inserter(tokens, tokens.begin()));
 
-    istringstream iss(laserscan_topics);
-    set<string> tokens;
-    copy(istream_iterator<string>(iss), istream_iterator<string>(), inserter<set<string>>(tokens, tokens.begin()));
-    std::vector<string> tmp_input_topics;
+    std::vector<std::string> tmp_input_topics(tokens.begin(), tokens.end());
+    std::sort(tmp_input_topics.begin(), tmp_input_topics.end());
+    tmp_input_topics.erase(std::unique(tmp_input_topics.begin(), tmp_input_topics.end()), tmp_input_topics.end());
 
-    while (!tokens.empty()) {
-        RCLCPP_INFO(this->get_logger(), "Waiting for topics ...");
-        sleep(1);
-
-        topics = this->get_topic_names_and_types();
-
-        for (const auto& topic_it : topics) {
-            std::vector<std::string> topic_types = topic_it.second;
-
-            if (std::find(topic_types.begin(), topic_types.end(), "sensor_msgs/msg/LaserScan") != topic_types.end() && tokens.erase(topic_it.first) > 0) {
-                tmp_input_topics.push_back(topic_it.first);
-            }
-        }
-    }
-
-    sort(tmp_input_topics.begin(), tmp_input_topics.end());
-    std::vector<string>::iterator last = std::unique(tmp_input_topics.begin(), tmp_input_topics.end());
-    tmp_input_topics.erase(last, tmp_input_topics.end());
-
-    // Do not re-subscribe if the topics are the same
-    if ((tmp_input_topics.size() != input_topics.size()) || !equal(tmp_input_topics.begin(), tmp_input_topics.end(), input_topics.begin())) {
-        input_topics = tmp_input_topics;
-
-        if (input_topics.size() > 0) {
-            scan_subscribers.resize(input_topics.size());
-            clouds_modified.resize(input_topics.size());
-            clouds.resize(input_topics.size());
-            RCLCPP_INFO(this->get_logger(), "Subscribing to topics\t%ld", scan_subscribers.size());
-            for (std::vector<int>::size_type i = 0; i < input_topics.size(); ++i) {
-                // workaround for std::bind https://github.com/ros2/rclcpp/issues/583
-                std::function<void(const sensor_msgs::msg::LaserScan::SharedPtr)> callback =
-                    std::bind(
-                        &LaserscanMerger::scanCallback,
-                        this, std::placeholders::_1, input_topics[i]);
-                scan_subscribers[i] = this->create_subscription<sensor_msgs::msg::LaserScan>(input_topics[i].c_str(), rclcpp::SensorDataQoS(), callback);
-                clouds_modified[i] = false;
-                cout << input_topics[i] << " ";
-            }
-        } else {
-            RCLCPP_INFO(this->get_logger(), "Not subscribed to any topic.");
-        }
-    }
-}
-
-void LaserscanMerger::scanCallback(sensor_msgs::msg::LaserScan::SharedPtr scan, std::string topic)
-{
-    sensor_msgs::msg::PointCloud2 tmpCloud1, tmpCloud2;
-
-    try {
-        // Verify that TF knows how to transform from the received scan to the destination scan frame
-        tf_buffer_->lookupTransform(scan->header.frame_id.c_str(), destination_frame.c_str(), scan->header.stamp, rclcpp::Duration(1, 0));
-        projector_.transformLaserScanToPointCloud(scan->header.frame_id, *scan, tmpCloud1, *tf_buffer_, range_max);
-        pcl_ros::transformPointCloud(destination_frame.c_str(), tmpCloud1, tmpCloud2, *tf_buffer_);
-    } catch (tf2::TransformException& ex) {
+    if (tmp_input_topics == input_topics_) {
         return;
     }
 
-    for (std::vector<int>::size_type i = 0; i < input_topics.size(); i++) {
-        if (topic.compare(input_topics[i]) == 0) {
-            pcl_conversions::toPCL(tmpCloud2, clouds[i]);
-            clouds_modified[i] = true;
-        }
+    input_topics_ = std::move(tmp_input_topics);
+    filtered_scans_.assign(input_topics_.size(), nullptr);
+    scan_ready_.assign(input_topics_.size(), false);
+    scan_subscribers_.clear();
+    scan_filters_.clear();
+
+    if (input_topics_.empty()) {
+        RCLCPP_WARN(this->get_logger(), "No LaserScan topics configured for subscription.");
+        return;
     }
 
-    // Count how many scans we have
-    std::vector<int>::size_type totalClouds = 0;
-    for (std::vector<int>::size_type i = 0; i < clouds_modified.size(); i++) {
-        if (clouds_modified[i]) {
-            totalClouds++;
-        }
-    }
+    RCLCPP_INFO(this->get_logger(), "Subscribing to %zu LaserScan topics with TF filtering", input_topics_.size());
+    scan_subscribers_.reserve(input_topics_.size());
+    scan_filters_.reserve(input_topics_.size());
 
-    // Go ahead only if all subscribed scans have arrived
-    if (totalClouds == clouds_modified.size()) {
-        pcl::PCLPointCloud2 merged_cloud = clouds[0];
-        clouds_modified[0] = false;
+    for (size_t i = 0; i < input_topics_.size(); ++i) {
+        const std::string topic = input_topics_[i];
 
-        for (std::vector<int>::size_type i = 1; i < clouds_modified.size(); i++) {
-#if PCL_VERSION_COMPARE(>=, 1, 10, 0)
-            merged_cloud += clouds[i];
-#else
-            pcl::concatenatePointCloud(merged_cloud, clouds[i], merged_cloud);
-#endif
+        auto sub = std::make_shared<message_filters::Subscriber<sensor_msgs::msg::LaserScan>>(this, topic, rclcpp::SensorDataQoS().get_rmw_qos_profile());
+        scan_subscribers_.push_back(sub);
 
-            clouds_modified[i] = false;
-        }
+        auto filter = std::make_shared<tf2_ros::MessageFilter<sensor_msgs::msg::LaserScan>>(
+            *sub, *tf_buffer_, destination_frame_, 10, this->get_node_logging_interface(), this->get_clock(), rclcpp::Duration::from_seconds(2.0));
 
-        Eigen::MatrixXf points;
+        auto callback = [this, i](const sensor_msgs::msg::LaserScan::ConstSharedPtr scan) {
+            this->scanFilterCallback(scan, i);
+        };
+        filter->registerCallback(std::move(callback));
 
-        pcl::getPointCloudAsEigen(merged_cloud, points);
-
-        pointcloud_to_laserscan(points, &merged_cloud);
-
-        // Publish point cloud after publishing laser scan as for some reason moveFromPCL is causing getPointCloudAsEigen to
-        // throw a segmentation fault crash
-        std::shared_ptr<sensor_msgs::msg::PointCloud2> cloud_msg = std::make_shared<sensor_msgs::msg::PointCloud2>();
-
-        pcl_conversions::moveFromPCL(merged_cloud, *cloud_msg);
-
-        point_cloud_publisher_->publish(*cloud_msg);
+        scan_filters_.push_back(filter);
+        RCLCPP_INFO(this->get_logger(), "  - %s (with TF filter to %s)", topic.c_str(), destination_frame_.c_str());
     }
 }
 
-void LaserscanMerger::pointcloud_to_laserscan(Eigen::MatrixXf points, pcl::PCLPointCloud2* merged_cloud)
+bool LaserscanMerger::computeTransform(const std::string& source_frame, const rclcpp::Time& stamp, tf2::Transform& out_transform)
 {
+    try {
+        auto tf_msg = tf_buffer_->lookupTransform(destination_frame_, source_frame, stamp, rclcpp::Duration::from_seconds(0.5));
+        tf2::Quaternion quat(
+            tf_msg.transform.rotation.x,
+            tf_msg.transform.rotation.y,
+            tf_msg.transform.rotation.z,
+            tf_msg.transform.rotation.w);
+        tf2::Vector3 trans(
+            tf_msg.transform.translation.x,
+            tf_msg.transform.translation.y,
+            tf_msg.transform.translation.z);
+        out_transform.setOrigin(trans);
+        out_transform.setRotation(quat);
+        return true;
+    } catch (const tf2::TransformException& ex) {
+        RCLCPP_WARN(this->get_logger(), "TF lookup failed for %s -> %s: %s",
+                    source_frame.c_str(), destination_frame_.c_str(), ex.what());
+        return false;
+    }
+}
+
+void LaserscanMerger::appendPointCloudPoint(std::vector<float>& points, const tf2::Vector3& point)
+{
+    points.push_back(static_cast<float>(point.x()));
+    points.push_back(static_cast<float>(point.y()));
+    points.push_back(static_cast<float>(point.z()));
+}
+
+void LaserscanMerger::scanFilterCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr scan, size_t index)
+{
+    if (index >= filtered_scans_.size()) {
+        return;
+    }
+
+    filtered_scans_[index] = scan;
+    scan_ready_[index] = true;
+
+    bool all_ready = true;
+    for (bool ready : scan_ready_) {
+        if (!ready) {
+            all_ready = false;
+            break;
+        }
+    }
+
+    if (!all_ready) {
+        return;
+    }
+
+    publishMergedData();
+    std::fill(scan_ready_.begin(), scan_ready_.end(), false);
+}
+
+void LaserscanMerger::publishMergedData()
+{
+    if (filtered_scans_.empty()) {
+        return;
+    }
+
     sensor_msgs::msg::LaserScan output;
-    output.header = pcl_conversions::fromPCL(merged_cloud->header);
-    output.angle_min = this->angle_min;
-    output.angle_max = this->angle_max;
-    output.angle_increment = this->angle_increment;
-    output.time_increment = this->time_increment;
-    output.scan_time = this->scan_time;
-    output.range_min = this->range_min;
-    output.range_max = this->range_max;
+    output.header.frame_id = destination_frame_;
+    output.header.stamp = this->get_clock()->now();
+    output.angle_min = angle_min_;
+    output.angle_max = angle_max_;
+    output.angle_increment = angle_increment_;
+    output.time_increment = time_increment_;
+    output.scan_time = scan_time_;
+    output.range_min = range_min_;
+    output.range_max = range_max_;
 
-    uint32_t ranges_size = std::ceil((output.angle_max - output.angle_min) / output.angle_increment);
-    output.ranges.assign(ranges_size, std::numeric_limits<double>::infinity());
+    const uint32_t ranges_size = static_cast<uint32_t>(std::floor((output.angle_max - output.angle_min) / output.angle_increment)) + 1u;
+    output.ranges.assign(ranges_size, std::numeric_limits<float>::infinity());
 
-    for (int i = 0; i < points.cols(); i++) {
-        const float& x = points(0, i);
-        const float& y = points(1, i);
-        const float& z = points(2, i);
+    std::vector<float> cloud_points;
+    cloud_points.reserve(1024);
 
-        if (std::isnan(x) || std::isnan(y) || std::isnan(z)) {
-            RCLCPP_DEBUG(this->get_logger(), "rejected for nan in point(%f, %f, %f)\n", x, y, z);
+    for (const auto& scan : filtered_scans_) {
+        if (!scan) {
             continue;
         }
 
-        double range_sq = pow(y, 2) + pow(x, 2);
-        double range_min_sq_ = output.range_min * output.range_min;
-        if (range_sq < range_min_sq_) {
-            RCLCPP_DEBUG(this->get_logger(), "rejected for range %f below minimum value %f. Point: (%f, %f, %f)", range_sq, range_min_sq_, x, y, z);
+        tf2::Transform transform;
+        if (!computeTransform(scan->header.frame_id, scan->header.stamp, transform)) {
             continue;
         }
 
-        double angle = atan2(y, x);
-        if (angle < output.angle_min || angle > output.angle_max) {
-            RCLCPP_DEBUG(this->get_logger(), "rejected for angle %f not in range (%f, %f)\n", angle, output.angle_min, output.angle_max);
-            continue;
-        }
+        for (size_t i = 0; i < scan->ranges.size(); ++i) {
+            const float range = scan->ranges[i];
+            if (!std::isfinite(range) || range < scan->range_min || range > scan->range_max) {
+                continue;
+            }
 
-        int index = (angle - output.angle_min) / output.angle_increment;
-        if (output.ranges[index] * output.ranges[index] > range_sq) {
-            output.ranges[index] = sqrt(range_sq);
+            const double scan_angle = scan->angle_min + static_cast<double>(i) * scan->angle_increment;
+            tf2::Vector3 point_source(
+                static_cast<double>(range) * std::cos(scan_angle),
+                static_cast<double>(range) * std::sin(scan_angle),
+                0.0);
+            const tf2::Vector3 point_dest = transform * point_source;
+
+            const double projected_range = std::hypot(point_dest.x(), point_dest.y());
+            if (projected_range < range_min_ || projected_range > range_max_) {
+                continue;
+            }
+
+            const double projected_angle = std::atan2(point_dest.y(), point_dest.x());
+            if (projected_angle < angle_min_ || projected_angle > angle_max_) {
+                continue;
+            }
+
+            const int bin = static_cast<int>((projected_angle - angle_min_) / angle_increment_);
+            if (bin < 0 || static_cast<size_t>(bin) >= ranges_size) {
+                continue;
+            }
+
+            if (projected_range < output.ranges[bin]) {
+                output.ranges[bin] = static_cast<float>(projected_range);
+            }
+            appendPointCloudPoint(cloud_points, point_dest);
+        }
+    }
+
+    // Use the latest scan timestamp for the merged messages.
+    for (const auto& scan : filtered_scans_) {
+        if (scan && scan->header.stamp > output.header.stamp) {
+            output.header.stamp = scan->header.stamp;
         }
     }
 
     laser_scan_publisher_->publish(output);
+
+    sensor_msgs::msg::PointCloud2 cloud_msg;
+    cloud_msg.header.frame_id = destination_frame_;
+    cloud_msg.header.stamp = output.header.stamp;
+    cloud_msg.height = 1;
+    cloud_msg.width = static_cast<uint32_t>(cloud_points.size() / 3);
+    cloud_msg.is_bigendian = false;
+    cloud_msg.is_dense = false;
+    cloud_msg.point_step = static_cast<uint32_t>(3 * sizeof(float));
+    cloud_msg.row_step = cloud_msg.point_step * cloud_msg.width;
+
+    cloud_msg.fields.resize(3);
+    cloud_msg.fields[0].name = "x";
+    cloud_msg.fields[0].offset = 0;
+    cloud_msg.fields[0].datatype = sensor_msgs::msg::PointField::FLOAT32;
+    cloud_msg.fields[0].count = 1;
+    cloud_msg.fields[1].name = "y";
+    cloud_msg.fields[1].offset = sizeof(float);
+    cloud_msg.fields[1].datatype = sensor_msgs::msg::PointField::FLOAT32;
+    cloud_msg.fields[1].count = 1;
+    cloud_msg.fields[2].name = "z";
+    cloud_msg.fields[2].offset = 2 * sizeof(float);
+    cloud_msg.fields[2].datatype = sensor_msgs::msg::PointField::FLOAT32;
+    cloud_msg.fields[2].count = 1;
+
+    cloud_msg.data.resize(cloud_points.size() * sizeof(float));
+    std::memcpy(cloud_msg.data.data(), cloud_points.data(), cloud_msg.data.size());
+
+    point_cloud_publisher_->publish(cloud_msg);
 }
 
 int main(int argc, char** argv)
 {
     rclcpp::init(argc, argv);
-
     rclcpp::spin(std::make_shared<LaserscanMerger>());
-
     rclcpp::shutdown();
-
     return 0;
 }

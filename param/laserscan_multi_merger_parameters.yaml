@@ -1,0 +1,31 @@
+laserscan_multi_merger:
+  destination_frame:
+    type: string
+    default_value: cart_frame
+  cloud_destination_topic:
+    type: string
+    default_value: /merged_cloud
+  scan_destination_topic:
+    type: string
+    default_value: /scan_multi
+  laserscan_topics:
+    type: string
+    default_value: ""
+  angle_min:
+    type: double
+    default_value: -3.14
+  angle_max:
+    type: double
+    default_value: 3.14
+  angle_increment:
+    type: double
+    default_value: 0.0058
+  scan_time:
+    type: double
+    default_value: 0.0
+  range_min:
+    type: double
+    default_value: 0.0
+  range_max:
+    type: double
+    default_value: 25.0
