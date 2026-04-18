@@ -73,6 +73,7 @@ target_link_libraries(laserscan_multi_merger
   rclcpp::rclcpp
   tf2::tf2
   tf2_ros::tf2_ros
+  laserscan_multi_merger_parameter
 )
 
 add_executable(laserscan_virtualizer src/laserscan_virtualizer.cpp)

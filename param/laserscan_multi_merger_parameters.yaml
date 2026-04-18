@@ -2,30 +2,56 @@ laserscan_multi_merger:
   destination_frame:
     type: string
     default_value: cart_frame
+    validation:
+      not_empty<>: null
   cloud_destination_topic:
     type: string
     default_value: /merged_cloud
+    validation:
+      not_empty<>: null
   scan_destination_topic:
     type: string
     default_value: /scan_multi
+    validation:
+      not_empty<>: null
   laserscan_topics:
-    type: string
-    default_value: ""
+    type: string_array
+    default_value: []
+    validation:
+      not_empty<>: null
+      unique<>: null
   angle_min:
     type: double
     default_value: -3.14
+    validation:
+      bounds<>: [ -3.141592653589793, 3.141592653589793 ]
   angle_max:
     type: double
     default_value: 3.14
+    validation:
+      bounds<>: [ -3.141592653589793, 3.141592653589793 ]
   angle_increment:
     type: double
     default_value: 0.0058
+    validation:
+      gt_eq<>: [ 0.0 ]
   scan_time:
     type: double
     default_value: 0.0
+    validation:
+      gt_eq<>: [ 0.0 ]
   range_min:
     type: double
     default_value: 0.0
+    validation:
+      gt_eq<>: [ 0.0 ]
   range_max:
     type: double
     default_value: 25.0
+    validation:
+      gt_eq<>: [ 0.0 ]
+  time_increment:
+    type: double
+    default_value: 0.0
+    validation:
+      gt_eq<>: [ 0.0 ]
