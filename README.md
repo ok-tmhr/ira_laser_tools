@@ -20,7 +20,7 @@ For detailed parameter descriptions, see [laserscan_multi_merger_parameters.md](
 ### Launch Files
 
 - `laserscan_multi_merger.launch.py`: Python launch file with parameter file support
-- `laserscan_multi_merger.launch.xml`: XML launch file with parameter file support
+- `laserscan_multi_merger.launch.xml`: XML launch file
 - `laserscan_multi_merger.launch.yaml`: YAML launch file
 - `laserscan_multi_merger_container.launch.py`: Component container launch (Python)
 - `laserscan_multi_merger_container.launch.xml`: Component container launch (XML)
