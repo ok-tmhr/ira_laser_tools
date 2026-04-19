@@ -50,8 +50,16 @@ laserscan_multi_merger:
     default_value: 25.0
     validation:
       gt_eq<>: [ 0.0 ]
+  queue_size:
+    type: int
+    default_value: 10
+    validation:
+      gt<>: [ 0 ]
   time_increment:
     type: double
     default_value: 0.0
+  publish_pointcloud:
+    type: bool
+    default_value: true
     validation:
       gt_eq<>: [ 0.0 ]
