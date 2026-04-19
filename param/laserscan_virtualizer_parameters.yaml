@@ -18,11 +18,12 @@ laserscan_virtualizer:
     validation:
       not_empty<>: null
   virtual_laser_scan:
-    type: string
-    default_value: scan1 scan2
-    description: List of virtual laser scan frames (space separated)
+    type: string_array
+    default_value: [ scan1, scan2 ]
+    description: List of virtual laser scan frames
     validation:
       not_empty<>: null
+      unique<>: null
   angle_min:
     type: double
     default_value: -3.14

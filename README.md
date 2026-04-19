@@ -37,7 +37,7 @@ Parameters are managed using the ROS 2 parameter library. Default values are def
 - `base_frame`: Reference frame which laser(s) are related to (string, default: "base_link")
 - `cloud_topic`: Input point cloud topic (string, default: "/cloud_pcd")
 - `output_laser_topic`: Virtual laser output topic, leave empty to publish on virtual laser names (string, default: "/scan")
-- `virtual_laser_scan`: List of virtual laser scan frames (space separated) (string, default: "scan1 scan2")
+- `virtual_laser_scan`: List of virtual laser scan frames (string_array, default: ["scan1", "scan2"])
 - `angle_min`: Minimum angle of virtual scan (radians) (double, default: -3.14)
 - `angle_max`: Maximum angle of virtual scan (radians) (double, default: 3.14)
 - `angle_increment`: Angular resolution of virtual scan (radians) (double, default: 0.0058)

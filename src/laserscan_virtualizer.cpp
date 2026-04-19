@@ -3,6 +3,7 @@
 #include "sensor_msgs/msg/laser_scan.hpp"
 #include "sensor_msgs/msg/point_cloud2.hpp"
 #include "sensor_msgs/point_cloud2_iterator.hpp"
+#include <algorithm>
 #include <cmath>
 #include <geometry_msgs/msg/transform_stamped.hpp>
 #include <string>
@@ -48,21 +49,17 @@ private:
 void LaserscanVirtualizer::virtual_laser_scan_parser()
 {
     // LaserScan frames to use for virtualization
-    istringstream iss(params_.virtual_laser_scan);
-    std::vector<string> tokens;
-    copy(istream_iterator<string>(iss), istream_iterator<string>(), back_inserter<std::vector<string>>(tokens));
-
     std::vector<string> tmp_output_frames;
 
-    for (std::vector<int>::size_type i = 0; i < tokens.size(); i++) {
+    for (const auto& frame : params_.virtual_laser_scan) {
         auto beg = this->get_clock()->now();
-        if (tf_buffer_->canTransform(params_.base_frame, tokens[i], rclcpp::Time(0), rclcpp::Duration(1, 0))) // Check if TF knows the transform from this frame reference to base_frame reference
+        if (tf_buffer_->canTransform(params_.base_frame, frame, rclcpp::Time(0), rclcpp::Duration(1, 0))) // Check if TF knows the transform from this frame reference to base_frame reference
         {
             cout << "Elapsed: " << (this->get_clock()->now() - beg).nanoseconds() / 1e9 << endl;
-            cout << "Adding: " << tokens[i] << endl;
-            tmp_output_frames.push_back(tokens[i]);
+            cout << "Adding: " << frame << endl;
+            tmp_output_frames.push_back(frame);
         } else {
-            cout << "Can't transform: '" << tokens[i] + "' to '" << params_.base_frame << "'" << endl;
+            cout << "Can't transform: '" << frame + "' to '" << params_.base_frame << "'" << endl;
         }
     }
 
