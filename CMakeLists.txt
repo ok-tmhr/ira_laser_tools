@@ -19,12 +19,9 @@ find_package(rclcpp_lifecycle REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
-find_package(laser_geometry REQUIRED)
 find_package(tf2 REQUIRED)
+find_package(tf2_geometry_msgs REQUIRED)
 find_package(tf2_ros REQUIRED)
-find_package(pcl_ros REQUIRED)
-find_package(Eigen3 REQUIRED)
-find_package(PCL REQUIRED)
 find_package(rcl_interfaces REQUIRED)
 find_package(message_filters REQUIRED)
 find_package(generate_parameter_library REQUIRED)
@@ -37,12 +34,9 @@ set(dependencies
   std_msgs
   geometry_msgs
   sensor_msgs
-  laser_geometry
   tf2
+  tf2_geometry_msgs
   tf2_ros
-  pcl_ros
-  Eigen3
-  PCL
   rcl_interfaces
 )
 
@@ -81,9 +75,7 @@ rclcpp_components_register_node(
 
 add_executable(laserscan_virtualizer src/laserscan_virtualizer.cpp)
 ament_target_dependencies(laserscan_virtualizer ${dependencies})
-target_include_directories(laserscan_virtualizer PUBLIC ${EIGEN_INCLUDE_DIRS})
-target_include_directories(laserscan_virtualizer PUBLIC ${PCL_INCLUDE_DIRS})
-target_link_libraries(laserscan_virtualizer laserscan_virtualizer_parameter ${PCL_LIBRARIES})
+target_link_libraries(laserscan_virtualizer laserscan_virtualizer_parameter)
 
 #############
 ## Install ##

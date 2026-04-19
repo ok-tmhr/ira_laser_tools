@@ -1,15 +1,12 @@
-#include "pcl_ros/transforms.hpp"
 #include "rcl_interfaces/msg/set_parameters_result.hpp"
 #include "rclcpp/rclcpp.hpp"
 #include "sensor_msgs/msg/laser_scan.hpp"
-#include <Eigen/Dense>
+#include "sensor_msgs/msg/point_cloud2.hpp"
+#include "sensor_msgs/point_cloud2_iterator.hpp"
+#include <cmath>
 #include <geometry_msgs/msg/transform_stamped.hpp>
-#include <laser_geometry/laser_geometry.hpp>
-#include <pcl/io/pcd_io.h>
-#include <pcl/point_cloud.h>
-#include <pcl/point_types.h>
-#include <pcl_conversions/pcl_conversions.h>
-#include <string.h>
+#include <string>
+#include <tf2/LinearMath/Transform.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 #include <tf2_ros/buffer.h>
 #include <tf2_ros/transform_listener.h>
@@ -17,16 +14,17 @@
 
 #include "ira_laser_tools/laserscan_virtualizer_parameter.hpp"
 
-typedef pcl::PointCloud<pcl::PointXYZ> myPointCloud;
-
 using namespace std;
-using namespace pcl;
 
 class LaserscanVirtualizer : public rclcpp::Node
 {
 public:
     LaserscanVirtualizer(const rclcpp::NodeOptions& options = rclcpp::NodeOptions());
-    void pointcloud_to_laserscan(Eigen::MatrixXf points, pcl::PCLHeader scan_header, int pub_index);
+    void pointcloud_to_laserscan(
+        const sensor_msgs::msg::PointCloud2::SharedPtr& pcl_in,
+        const tf2::Transform& transform,
+        const std::string& output_frame,
+        int pub_index);
     void pointCloudCallback(sensor_msgs::msg::PointCloud2::SharedPtr pcl_in);
 
 private:
@@ -35,7 +33,8 @@ private:
 
     std::shared_ptr<tf2_ros::TransformListener> tfListener_;
     std::unique_ptr<tf2_ros::Buffer> tf_buffer_;
-    std::vector<tf2::Stamped<tf2::Transform>> transform_;
+    std::vector<tf2::Transform> transform_;
+    std::vector<bool> has_transform_;
 
     rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr point_cloud_subscription_;
     std::vector<rclcpp::Publisher<sensor_msgs::msg::LaserScan>::SharedPtr> virtual_scan_publishers;
@@ -121,47 +120,35 @@ LaserscanVirtualizer::LaserscanVirtualizer(const rclcpp::NodeOptions& options) :
 void LaserscanVirtualizer::pointCloudCallback(sensor_msgs::msg::PointCloud2::SharedPtr pcl_in)
 {
     if (cloud_frame.empty()) {
-        cloud_frame = (*pcl_in).header.frame_id;
+        cloud_frame = pcl_in->header.frame_id;
         transform_.resize(output_frames.size());
+        has_transform_.assign(output_frames.size(), false);
         for (std::vector<int>::size_type i = 0; i < output_frames.size(); i++) {
             if (tf_buffer_->canTransform(output_frames[i], cloud_frame, rclcpp::Time(0), rclcpp::Duration(2, 0))) {
                 geometry_msgs::msg::TransformStamped tfGeom = tf_buffer_->lookupTransform(output_frames[i], cloud_frame, rclcpp::Time(0));
-
-                tf2::convert(tfGeom, transform_[i]);
+                tf2::fromMsg(tfGeom.transform, transform_[i]);
+                has_transform_[i] = true;
             }
         }
     }
 
     for (std::vector<int>::size_type i = 0; i < output_frames.size(); i++) {
-        myPointCloud pcl_out, tmpPcl;
-        pcl::PCLPointCloud2 tmpPcl2;
-
-        pcl_conversions::toPCL(*pcl_in, tmpPcl2);
-        pcl::fromPCLPointCloud2(tmpPcl2, tmpPcl);
-
-        // Initialize the header of the temporary pointcloud, needed to rototranslate the three points that define our plane
-        // It shall be equal to the input point cloud's one, changing only the 'frame_id'
-        string tmpFrame = output_frames[i];
-        pcl_out.header = tmpPcl.header;
-
-        // Ask tf to rototranslate the velodyne pointcloud to base_frame reference
-        pcl_ros::transformPointCloud(tmpPcl, pcl_out, transform_[i]);
-        pcl_out.header.frame_id = tmpFrame;
-
-        // Transform the pcl into eigen matrix
-        Eigen::MatrixXf tmpEigenMatrix;
-        pcl::toPCLPointCloud2(pcl_out, tmpPcl2);
-        pcl::getPointCloudAsEigen(tmpPcl2, tmpEigenMatrix);
-
-        // Extract the points close to the z=0 plane, convert them into a laser-scan message and publish it
-        pointcloud_to_laserscan(tmpEigenMatrix, pcl_out.header, i);
+        if (i >= has_transform_.size() || !has_transform_[i]) {
+            continue;
+        }
+        pointcloud_to_laserscan(pcl_in, transform_[i], output_frames[i], i);
     }
 }
 
-void LaserscanVirtualizer::pointcloud_to_laserscan(Eigen::MatrixXf points, pcl::PCLHeader scan_header, int pub_index) // pcl::PCLPointCloud2 *merged_cloud)
+void LaserscanVirtualizer::pointcloud_to_laserscan(
+    const sensor_msgs::msg::PointCloud2::SharedPtr& pcl_in,
+    const tf2::Transform& transform,
+    const std::string& output_frame,
+    int pub_index)
 {
     sensor_msgs::msg::LaserScan output;
-    output.header = pcl_conversions::fromPCL(scan_header);
+    output.header = pcl_in->header;
+    output.header.frame_id = output_frame;
     output.angle_min = params_.angle_min;
     output.angle_max = params_.angle_max;
     output.angle_increment = params_.angle_increment;
@@ -173,32 +160,47 @@ void LaserscanVirtualizer::pointcloud_to_laserscan(Eigen::MatrixXf points, pcl::
     uint32_t ranges_size = std::ceil((output.angle_max - output.angle_min) / output.angle_increment);
     output.ranges.assign(ranges_size, output.range_max + 1.0);
 
-    for (int i = 0; i < points.cols(); i++) {
-        const float& x = points(0, i);
-        const float& y = points(1, i);
-        const float& z = points(2, i);
+    sensor_msgs::PointCloud2ConstIterator<float> iter_x(*pcl_in, "x");
+    sensor_msgs::PointCloud2ConstIterator<float> iter_y(*pcl_in, "y");
+    sensor_msgs::PointCloud2ConstIterator<float> iter_z(*pcl_in, "z");
+
+    for (; iter_x != iter_x.end(); ++iter_x, ++iter_y, ++iter_z) {
+        float x = *iter_x;
+        float y = *iter_y;
+        float z = *iter_z;
 
         if (std::isnan(x) || std::isnan(y) || std::isnan(z)) {
             RCLCPP_DEBUG(this->get_logger(), "rejected for nan in point(%f, %f, %f)\n", x, y, z);
             continue;
         }
 
-        double range_sq = pow(y, 2) + pow(x, 2);
+        tf2::Vector3 point(x, y, z);
+        tf2::Vector3 transformed = transform * point;
+        double tx = transformed.x();
+        double ty = transformed.y();
+        double tz = transformed.z();
+
+        double range_sq = tx * tx + ty * ty;
         double range_min_sq_ = output.range_min * output.range_min;
         if (range_sq < range_min_sq_) {
-            RCLCPP_DEBUG(this->get_logger(), "rejected for range %f below minimum value %f. Point: (%f, %f, %f)", range_sq, range_min_sq_, x, y, z);
+            RCLCPP_DEBUG(this->get_logger(), "rejected for range %f below minimum value %f. Point: (%f, %f, %f)", range_sq, range_min_sq_, tx, ty, tz);
             continue;
         }
 
-        double angle = atan2(y, x);
+        double angle = atan2(ty, tx);
         if (angle < output.angle_min || angle > output.angle_max) {
             RCLCPP_DEBUG(this->get_logger(), "rejected for angle %f not in range (%f, %f)\n", angle, output.angle_min, output.angle_max);
             continue;
         }
 
-        int index = (angle - output.angle_min) / output.angle_increment;
-        if (output.ranges[index] * output.ranges[index] > range_sq) {
-            output.ranges[index] = sqrt(range_sq);
+        int index = static_cast<int>((angle - output.angle_min) / output.angle_increment);
+        if (index < 0 || static_cast<uint32_t>(index) >= ranges_size) {
+            continue;
+        }
+
+        double existing_range_sq = output.ranges[index] * output.ranges[index];
+        if (existing_range_sq > range_sq) {
+            output.ranges[index] = std::sqrt(range_sq);
         }
     }
 
