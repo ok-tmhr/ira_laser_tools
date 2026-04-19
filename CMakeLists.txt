@@ -28,6 +28,7 @@ find_package(PCL REQUIRED)
 find_package(rcl_interfaces REQUIRED)
 find_package(message_filters REQUIRED)
 find_package(generate_parameter_library REQUIRED)
+find_package(rclcpp_components REQUIRED)
 
 set(dependencies
   rclcpp
@@ -59,21 +60,21 @@ remove_definitions(-DDISABLE_LIBUSB-1.0)
 
 generate_parameter_library(laserscan_multi_merger_parameter param/laserscan_multi_merger_parameters.yaml)
 
-add_executable(laserscan_multi_merger src/laserscan_multi_merger.cpp)
-ament_target_dependencies(laserscan_multi_merger
-  rclcpp
-  sensor_msgs
-  tf2
-  tf2_ros
-  rcl_interfaces
-  message_filters
-)
-
-target_link_libraries(laserscan_multi_merger
+add_library(laserscan_multi_merger_component src/laserscan_multi_merger.cpp)
+target_link_libraries(laserscan_multi_merger_component
   rclcpp::rclcpp
   tf2::tf2
   tf2_ros::tf2_ros
   laserscan_multi_merger_parameter
+  rclcpp_components::component
+  message_filters::message_filters
+  ${sensor_msgs_TARGETS}
+)
+
+rclcpp_components_register_node(
+  laserscan_multi_merger_component
+  PLUGIN ira_laser_tools::LaserScanMerger
+  EXECUTABLE laserscan_multi_merger
 )
 
 add_executable(laserscan_virtualizer src/laserscan_virtualizer.cpp)
@@ -87,10 +88,16 @@ target_link_libraries(laserscan_virtualizer ${PCL_LIBRARIES})
 #############
 
 ## Mark executables and/or libraries for installation
-install(TARGETS laserscan_multi_merger laserscan_virtualizer
+install(TARGETS laserscan_virtualizer
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
   RUNTIME DESTINATION lib/${PROJECT_NAME}
+)
+
+install(TARGETS laserscan_multi_merger_component
+  ARCHIVE DESTINATION lib
+  LIBRARY DESTINATION lib
+  RUNTIME DESTINATION bin
 )
 
 ## Mark other files for installation (e.g. launch and bag files, etc.)

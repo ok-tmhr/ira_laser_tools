@@ -41,17 +41,18 @@ using Synchronizer2 = message_filters::Synchronizer<Policy2>;
 using Synchronizer3 = message_filters::Synchronizer<Policy3>;
 using Synchronizer4 = message_filters::Synchronizer<Policy4>;
 
+namespace ira_laser_tools
+{
 class LaserscanMerger : public rclcpp::Node
 {
 public:
-    LaserscanMerger();
+    LaserscanMerger(const rclcpp::NodeOptions& options = rclcpp::NodeOptions());
 
 private:
     void on_sync(const LaserScan::ConstSharedPtr& scan1, const LaserScan::ConstSharedPtr& scan2);
     void on_sync3(const LaserScan::ConstSharedPtr& scan1, const LaserScan::ConstSharedPtr& scan2, const LaserScan::ConstSharedPtr& scan3);
     void on_sync4(const LaserScan::ConstSharedPtr& scan1, const LaserScan::ConstSharedPtr& scan2, const LaserScan::ConstSharedPtr& scan3, const LaserScan::ConstSharedPtr& scan4);
     void publishMergedData(const std::vector<LaserScan::ConstSharedPtr>& scans);
-    void laserscan_topic_parser();
     void addScanToMerged(const LaserScan::ConstSharedPtr& scan, LaserScan& output, std::vector<float>* point_cloud_points);
     void appendPointCloudPoint(std::vector<float>& points, const tf2::Vector3& point);
     void publishPointCloud(const std::vector<float>& points, const rclcpp::Time& stamp);
@@ -71,7 +72,7 @@ private:
     laserscan_multi_merger::Params params_;
 };
 
-LaserscanMerger::LaserscanMerger() : Node("laserscan_multi_merger")
+LaserscanMerger::LaserscanMerger(const rclcpp::NodeOptions& options) : Node("laserscan_multi_merger", options)
 {
     param_listener_ = std::make_shared<laserscan_multi_merger::ParamListener>(get_node_parameters_interface(), get_logger());
     params_ = param_listener_->get_params();
@@ -83,14 +84,6 @@ LaserscanMerger::LaserscanMerger() : Node("laserscan_multi_merger")
     tf_buffer_->setCreateTimerInterface(std::make_shared<tf2_ros::CreateTimerROS>(this->get_node_base_interface(), this->get_node_timers_interface()));
     tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
 
-    this->laserscan_topic_parser();
-
-    point_cloud_publisher_ = this->create_publisher<sensor_msgs::msg::PointCloud2>(params_.cloud_destination_topic, rclcpp::SensorDataQoS());
-    laser_scan_publisher_ = this->create_publisher<LaserScan>(params_.scan_destination_topic, rclcpp::SensorDataQoS());
-}
-
-void LaserscanMerger::laserscan_topic_parser()
-{
     const size_t num_topics = params_.laserscan_topics.size();
     RCLCPP_INFO(this->get_logger(), "Subscribing to %zu LaserScan topics with TF filtering", num_topics);
 
@@ -124,6 +117,9 @@ void LaserscanMerger::laserscan_topic_parser()
     default:
         RCLCPP_ERROR(this->get_logger(), "laserscan_topics must contain 1, 2, 3, or 4 topics for synchronization.");
     }
+
+    point_cloud_publisher_ = this->create_publisher<sensor_msgs::msg::PointCloud2>(params_.cloud_destination_topic, rclcpp::SensorDataQoS());
+    laser_scan_publisher_ = this->create_publisher<LaserScan>(params_.scan_destination_topic, rclcpp::SensorDataQoS());
 }
 
 void LaserscanMerger::appendPointCloudPoint(std::vector<float>& points, const tf2::Vector3& point)
@@ -271,11 +267,7 @@ void LaserscanMerger::publishPointCloud(const std::vector<float>& points, const 
 
     point_cloud_publisher_->publish(cloud_msg);
 }
+} // namespace ira_laser_tools
 
-int main(int argc, char** argv)
-{
-    rclcpp::init(argc, argv);
-    rclcpp::spin(std::make_shared<LaserscanMerger>());
-    rclcpp::shutdown();
-    return 0;
-}
+#include "rclcpp_components/register_node_macro.hpp"
+RCLCPP_COMPONENTS_REGISTER_NODE(ira_laser_tools::LaserscanMerger)
