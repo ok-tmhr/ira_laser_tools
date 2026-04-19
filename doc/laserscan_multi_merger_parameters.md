@@ -69,8 +69,8 @@ List of input LaserScan topic names (must contain 2-4 topics)
 _Constraints:_
 
 - contains no duplicates
-- length is less than 1
-- length is greater than 5
+- length is greater than 1
+- length is less than 5
 
 _Additional Constraints:_
 
