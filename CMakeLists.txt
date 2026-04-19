@@ -12,7 +12,7 @@ if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options(-Wall -Wextra -Wpedantic)
 endif()
 
-find_package(ament_cmake REQUIRED)
+find_package(ament_cmake_ros REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rclcpp_action REQUIRED)
 find_package(rclcpp_lifecycle REQUIRED)
@@ -60,7 +60,7 @@ remove_definitions(-DDISABLE_LIBUSB-1.0)
 
 generate_parameter_library(laserscan_multi_merger_parameter param/laserscan_multi_merger_parameters.yaml)
 
-add_library(laserscan_multi_merger_component src/laserscan_multi_merger.cpp)
+add_library(laserscan_multi_merger_component SHARED src/laserscan_multi_merger.cpp)
 target_link_libraries(laserscan_multi_merger_component
   rclcpp::rclcpp
   tf2::tf2
@@ -73,7 +73,7 @@ target_link_libraries(laserscan_multi_merger_component
 
 rclcpp_components_register_node(
   laserscan_multi_merger_component
-  PLUGIN ira_laser_tools::LaserScanMerger
+  PLUGIN ira_laser_tools::LaserscanMerger
   EXECUTABLE laserscan_multi_merger
 )
 
@@ -101,8 +101,8 @@ install(TARGETS laserscan_multi_merger_component
 )
 
 ## Mark other files for installation (e.g. launch and bag files, etc.)
-install(DIRECTORY launch/
-  DESTINATION share/${PROJECT_NAME}/launch
+install(DIRECTORY launch/ config
+  DESTINATION share/${PROJECT_NAME}
 )
 
 ament_export_dependencies(${dependencies})

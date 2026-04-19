@@ -1,0 +1,51 @@
+launch:
+  - arg:
+      name: use_sim_time
+      default: "false"
+      description: Use simulated time if true
+  - arg:
+      name: log_level
+      default: info
+      description: ROS logger level for the node
+  - arg:
+      name: ns
+      default: ""
+      description: Namespace to launch the node into
+
+  - node:
+      pkg: ira_laser_tools
+      name: laserscan_multi_merger
+      exec: laserscan_multi_merger
+      namespace: $(var ns)
+      output: screen
+      ros_args: --log-level $(var log_level)
+      param:
+        - name: destination_frame
+          value: base_link
+        - name: cloud_destination_topic
+          value: /merged_cloud
+        - name: scan_destination_topic
+          value: /scan_multi
+        - name: laserscan_topics
+          value: [ /scan1, /scan2 ]
+          type: list_of_str
+        - name: publish_pointcloud
+          value: true
+        - name: queue_size
+          value: 10
+        - name: time_increment
+          value: 0.0
+        - name: angle_min
+          value: -3.14
+        - name: angle_max
+          value: 3.14
+        - name: angle_increment
+          value: 0.00437
+        - name: scan_time
+          value: 0.0
+        - name: range_min
+          value: 0.1
+        - name: range_max
+          value: 2.0
+        - name: use_sim_time
+          value: $(var use_sim_time)
