@@ -20,11 +20,11 @@ For detailed parameter descriptions, see [laserscan_multi_merger_parameters.md](
 ### Launch Files
 
 - `laserscan_multi_merger.launch.py`: Python launch file with parameter file support
-- `laserscan_multi_merger.launch.xml`: XML launch file
-- `laserscan_multi_merger.launch.yaml`: YAML launch file
-- `laserscan_multi_merger_container.launch.py`: Component container launch (Python)
-- `laserscan_multi_merger_container.launch.xml`: Component container launch (XML)
-- `laserscan_multi_merger_container.launch.yaml`: Component container launch (YAML)
+- `sample/laserscan_multi_merger.launch.xml`: XML launch sample
+- `sample/laserscan_multi_merger.launch.yaml`: YAML launch sample
+- `sample/laserscan_multi_merger_container.launch.py`: Component container launch sample (Python)
+- `sample/laserscan_multi_merger_container.launch.xml`: Component container launch sample (XML)
+- `sample/laserscan_multi_merger_container.launch.yaml`: Component container launch sample (YAML)
 
 ## laserscan_virtualizer
 
@@ -38,7 +38,9 @@ For detailed parameter descriptions, see [laserscan_virtualizer_parameters.md](d
 
 ### Launch Files
 
-- `laserscan_virtualizer.launch`: Legacy XML launch file
+- `laserscan_virtualizer.launch.py`: Python launch file with parameter file support and static TF publishers
+- `sample/laserscan_virtualizer.launch.xml`: XML launch sample
+- `sample/laserscan_virtualizer.launch.yaml`: YAML launch sample
 
 ## Building
 
@@ -49,6 +51,9 @@ colcon build --symlink-install
 ```
 
 ## Documentation
+
+- [laserscan_multi_merger_parameters.md](doc/laserscan_multi_merger_parameters.md)
+- [laserscan_virtualizer_parameters.md](doc/laserscan_virtualizer_parameters.md)
 
 For any questions, please contact us at furlan@disco.unimib.it or augusto.ballardini@unimib.it
 
