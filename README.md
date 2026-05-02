@@ -34,16 +34,7 @@ Allows to easily generate virtual laser scans from a pointcloud such as the one 
 
 Parameters are managed using the ROS 2 parameter library. Default values are defined in `param/laserscan_virtualizer_parameters.yaml`.
 
-- `base_frame`: Reference frame which laser(s) are related to (string, default: "base_link")
-- `cloud_topic`: Input point cloud topic (string, default: "/cloud_pcd")
-- `output_laser_topic`: Virtual laser output topic, leave empty to publish on virtual laser names (string, default: "/scan")
-- `virtual_laser_scan`: List of virtual laser scan frames (string_array, default: ["scan1", "scan2"])
-- `angle_min`: Minimum angle of virtual scan (radians) (double, default: -3.14)
-- `angle_max`: Maximum angle of virtual scan (radians) (double, default: 3.14)
-- `angle_increment`: Angular resolution of virtual scan (radians) (double, default: 0.0058)
-- `scan_time`: Time duration of a complete scan (seconds) (double, default: 0.0)
-- `range_min`: Minimum valid range for measurements (meters) (double, default: 0.0)
-- `range_max`: Maximum valid range for measurements (meters) (double, default: 25.0)
+For detailed parameter descriptions, see [laserscan_virtualizer_parameters.md](doc/laserscan_virtualizer_parameters.md).
 
 ### Launch Files
 
