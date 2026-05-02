@@ -21,6 +21,8 @@
 using std::placeholders::_1;
 using PointCloud2 = sensor_msgs::msg::PointCloud2;
 
+namespace ira_laser_tools
+{
 class LaserscanVirtualizer : public rclcpp::Node
 {
 public:
@@ -186,14 +188,6 @@ void LaserscanVirtualizer::pointcloud_to_laserscan(
 
     virtual_scan_publishers[pub_index]->publish(output);
 }
-
-int main(int argc, char** argv)
-{
-    rclcpp::init(argc, argv);
-
-    rclcpp::spin(std::make_shared<LaserscanVirtualizer>());
-
-    rclcpp::shutdown();
-
-    return 0;
-}
+} // namespace ira_laser_tools
+#include <rclcpp_components/register_node_macro.hpp>
+RCLCPP_COMPONENTS_REGISTER_NODE(ira_laser_tools::LaserscanVirtualizer)

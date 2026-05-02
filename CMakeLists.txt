@@ -38,6 +38,7 @@ set(dependencies
   tf2_geometry_msgs
   tf2_ros
   rcl_interfaces
+  rclcpp_components
 )
 
 
@@ -73,28 +74,26 @@ rclcpp_components_register_node(
   EXECUTABLE laserscan_multi_merger
 )
 
-add_executable(laserscan_virtualizer src/laserscan_virtualizer.cpp)
-ament_target_dependencies(laserscan_virtualizer ${dependencies})
-target_link_libraries(laserscan_virtualizer laserscan_virtualizer_parameter)
+add_library(laserscan_virtualizer_component SHARED src/laserscan_virtualizer.cpp)
+ament_target_dependencies(laserscan_virtualizer_component ${dependencies})
+target_link_libraries(laserscan_virtualizer_component laserscan_virtualizer_parameter)
+
+rclcpp_components_register_node(
+  laserscan_virtualizer_component
+  PLUGIN ira_laser_tools::LaserscanVirtualizer
+  EXECUTABLE laserscan_virtualizer
+)
 
 #############
 ## Install ##
 #############
 
-## Mark executables and/or libraries for installation
-install(TARGETS laserscan_virtualizer
-  ARCHIVE DESTINATION lib
-  LIBRARY DESTINATION lib
-  RUNTIME DESTINATION lib/${PROJECT_NAME}
-)
-
-install(TARGETS laserscan_multi_merger_component
+install(TARGETS laserscan_multi_merger_component laserscan_virtualizer_component
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
   RUNTIME DESTINATION bin
 )
 
-## Mark other files for installation (e.g. launch and bag files, etc.)
 install(DIRECTORY launch/ config
   DESTINATION share/${PROJECT_NAME}
 )
