@@ -14,3 +14,18 @@
       scan_destination_topic: /scan_multi
       scan_time: 0.0
       time_increment: 0.0
+
+  laserscan_virtualizer:
+    ros__parameters:
+      angle_increment: 0.00437
+      angle_max: 3.14
+      angle_min: -3.14
+      base_frame: base_link
+      cloud_topic: /trunk4_camera_depth_camera/points
+      output_laser_topic: /scan
+      range_max: 2.0
+      range_min: 0.1
+      scan_time: 0.0
+      virtual_laser_scan:
+        - scan1
+        - scan2
