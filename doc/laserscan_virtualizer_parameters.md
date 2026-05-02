@@ -17,14 +17,9 @@ laserscan_virtualizer:
     virtual_laser_scan: [scan1, scan2]
 ```
 
-The `laserscan_virtualizer` node converts an input `sensor_msgs/msg/PointCloud2`
-message into one or more virtual `sensor_msgs/msg/LaserScan` messages. Each frame
-listed in `virtual_laser_scan` must have a TF transform available from the
-incoming point cloud frame.
-
 ## base_frame
 
-Reference frame used by the TF message filter before processing incoming point clouds.
+Reference frame which laser(s) are related to
 
 - Type: `string`
 - Default Value: "base_link"
@@ -33,9 +28,11 @@ _Constraints:_
 
 - parameter is not empty
 
+_Additional Constraints:_
+
 ## cloud_topic
 
-Input `PointCloud2` topic.
+Input point cloud topic
 
 - Type: `string`
 - Default Value: "/cloud_pcd"
@@ -44,61 +41,58 @@ _Constraints:_
 
 - parameter is not empty
 
+_Additional Constraints:_
+
 ## output_laser_topic
 
-Topic used for virtual LaserScan output.
-
-When this value is not empty, every virtual scan publisher uses this same topic
-name. When this value is empty, each virtual scan is published on the
-corresponding frame name from `virtual_laser_scan`.
+Virtual laser output topic, leave empty to publish on virtual laser names
 
 - Type: `string`
 - Default Value: "/scan"
 
-_Constraints:_
-
-- parameter is not empty
-
 ## virtual_laser_scan
 
-List of virtual laser frame names to generate from the input point cloud.
-
-For each configured frame, the node looks up a transform from the input cloud
-frame to that virtual laser frame and publishes a LaserScan in that frame.
+List of virtual laser scan frames
 
 - Type: `string_array`
-- Default Value: {"scan1", "scan2"}
+- Default Value: ["scan1", "scan2"]
 
 _Constraints:_
 
 - parameter is not empty
 - contains no duplicates
 
+_Additional Constraints:_
+
 ## angle_min
 
-Minimum angle of the generated virtual scan, in radians.
+Minimum angle of virtual scan (radians)
 
 - Type: `double`
 - Default Value: -3.14
 
 _Constraints:_
 
-- parameter must be within bounds -3.141592653589793 to 3.141592653589793
+- parameter must be within bounds -3.141592653589793
+
+_Additional Constraints:_
 
 ## angle_max
 
-Maximum angle of the generated virtual scan, in radians.
+Maximum angle of virtual scan (radians)
 
 - Type: `double`
 - Default Value: 3.14
 
 _Constraints:_
 
-- parameter must be within bounds -3.141592653589793 to 3.141592653589793
+- parameter must be within bounds -3.141592653589793
+
+_Additional Constraints:_
 
 ## angle_increment
 
-Angular resolution of the generated virtual scan, in radians.
+Angular resolution of virtual scan (radians)
 
 - Type: `double`
 - Default Value: 0.0058
@@ -107,9 +101,11 @@ _Constraints:_
 
 - greater than 0.0
 
+_Additional Constraints:_
+
 ## scan_time
 
-Time duration of a complete scan, in seconds.
+Time duration of a complete scan (seconds)
 
 - Type: `double`
 - Default Value: 0.0
@@ -117,10 +113,12 @@ Time duration of a complete scan, in seconds.
 _Constraints:_
 
 - greater than or equal to 0.0
+
+_Additional Constraints:_
 
 ## range_min
 
-Minimum valid range for measurements, in meters.
+Minimum valid range for measurements (meters)
 
 - Type: `double`
 - Default Value: 0.0
@@ -129,9 +127,11 @@ _Constraints:_
 
 - greater than or equal to 0.0
 
+_Additional Constraints:_
+
 ## range_max
 
-Maximum valid range for measurements, in meters.
+Maximum valid range for measurements (meters)
 
 - Type: `double`
 - Default Value: 25.0
@@ -139,3 +139,5 @@ Maximum valid range for measurements, in meters.
 _Constraints:_
 
 - greater than or equal to 0.0
+
+_Additional Constraints:_

@@ -15,8 +15,6 @@ laserscan_virtualizer:
     type: string
     default_value: /scan
     description: Virtual laser output topic, leave empty to publish on virtual laser names
-    validation:
-      not_empty<>: null
   virtual_laser_scan:
     type: string_array
     default_value: [ scan1, scan2 ]
