@@ -1,20 +1,19 @@
-#include "rclcpp/rclcpp.hpp"
-#include "sensor_msgs/msg/laser_scan.hpp"
-#include "sensor_msgs/msg/point_cloud2.hpp"
-#include "sensor_msgs/point_cloud2_iterator.hpp"
-#include <algorithm>
 #include <cmath>
+#include <string>
+#include <vector>
+
 #include <geometry_msgs/msg/transform_stamped.hpp>
 #include <message_filters/subscriber.hpp>
-#include <message_filters/sync_policies/approximate_time.hpp>
-#include <string>
-#include <tf2/LinearMath/Transform.h>
-#include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
-#include <tf2_ros/buffer.h>
+#include <rclcpp/node.hpp>
+#include <rclcpp/node_options.hpp>
+#include <sensor_msgs/msg/laser_scan.hpp>
+#include <sensor_msgs/msg/point_cloud2.hpp>
+#include <sensor_msgs/point_cloud2_iterator.hpp>
+#include <tf2/LinearMath/Transform.hpp>
+#include <tf2_ros/buffer.hpp>
 #include <tf2_ros/create_timer_ros.hpp>
 #include <tf2_ros/message_filter.hpp>
-#include <tf2_ros/transform_listener.h>
-#include <vector>
+#include <tf2_ros/transform_listener.hpp>
 
 #include "ira_laser_tools/laserscan_virtualizer_parameter.hpp"
 
@@ -35,19 +34,16 @@ public:
     void pointCloudCallback(const PointCloud2::ConstSharedPtr& pcl_in);
 
 private:
-    std::shared_ptr<laserscan_virtualizer::ParamListener> param_listener_;
-    laserscan_virtualizer::Params params_;
-
-    std::shared_ptr<tf2_ros::TransformListener> tfListener_;
-    std::unique_ptr<tf2_ros::Buffer> tf_buffer_;
-    std::vector<tf2::Transform> transform_;
-
-    std::vector<rclcpp::Publisher<sensor_msgs::msg::LaserScan>::SharedPtr> virtual_scan_publishers;
-
-    std::shared_ptr<message_filters::Subscriber<PointCloud2>> cloud_sub_;
-    std::shared_ptr<tf2_ros::MessageFilter<PointCloud2>> filter_;
     void virtual_laser_scan_parser();
 
+    std::shared_ptr<laserscan_virtualizer::ParamListener> param_listener_;
+    std::shared_ptr<tf2_ros::TransformListener> tfListener_;
+    std::unique_ptr<tf2_ros::Buffer> tf_buffer_;
+    std::shared_ptr<message_filters::Subscriber<PointCloud2>> cloud_sub_;
+    std::shared_ptr<tf2_ros::MessageFilter<PointCloud2>> filter_;
+    std::vector<rclcpp::Publisher<sensor_msgs::msg::LaserScan>::SharedPtr> virtual_scan_publishers;
+    std::vector<tf2::Transform> transform_;
+    laserscan_virtualizer::Params params_;
     std::string cloud_frame_;
 };
 
@@ -57,7 +53,6 @@ void LaserscanVirtualizer::virtual_laser_scan_parser()
 
     virtual_scan_publishers.clear();
     filter_.reset();
-
     virtual_scan_publishers.reserve(num_topics);
 
     cloud_sub_ = std::make_shared<message_filters::Subscriber<PointCloud2>>(
@@ -67,7 +62,7 @@ void LaserscanVirtualizer::virtual_laser_scan_parser()
         this->get_node_logging_interface(), this->get_node_clock_interface(), std::chrono::seconds(1));
     filter_->registerCallback(std::bind(&LaserscanVirtualizer::pointCloudCallback, this, _1));
 
-    RCLCPP_INFO(this->get_logger(), "Publishing: %ld virtual scans", params_.virtual_laser_scan.size());
+    RCLCPP_INFO(this->get_logger(), "Publishing: %ld virtual scans", num_topics);
     if (params_.output_laser_topic.empty()) {
         for (const auto& t : params_.virtual_laser_scan) {
             const auto pub = this->create_publisher<sensor_msgs::msg::LaserScan>(t, rclcpp::SensorDataQoS());
@@ -84,10 +79,9 @@ void LaserscanVirtualizer::virtual_laser_scan_parser()
     }
 }
 
-LaserscanVirtualizer::LaserscanVirtualizer(const rclcpp::NodeOptions& options) : Node("laserscan_virtualizer", options)
+LaserscanVirtualizer::LaserscanVirtualizer(const rclcpp::NodeOptions& options) : Node("laserscan_virtualizer", options), cloud_frame_("")
 {
     param_listener_ = std::make_shared<laserscan_virtualizer::ParamListener>(get_node_parameters_interface(), get_logger());
-
     param_listener_->setUserCallback([this](const laserscan_virtualizer::Params& new_params) {
         params_ = new_params;
         // Re-parse virtual laser scan if changed
@@ -95,14 +89,10 @@ LaserscanVirtualizer::LaserscanVirtualizer(const rclcpp::NodeOptions& options) :
     });
 
     params_ = param_listener_->get_params();
-
     tf_buffer_ = std::make_unique<tf2_ros::Buffer>(this->get_clock());
     tf_buffer_->setCreateTimerInterface(std::make_shared<tf2_ros::CreateTimerROS>(this->get_node_base_interface(), this->get_node_timers_interface()));
     tfListener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
-
     this->virtual_laser_scan_parser();
-
-    cloud_frame_ = "";
 }
 
 void LaserscanVirtualizer::pointCloudCallback(const PointCloud2::ConstSharedPtr& pcl_in)
@@ -152,7 +142,7 @@ void LaserscanVirtualizer::pointcloud_to_laserscan(
         float z = *iter_z;
 
         if (std::isnan(x) || std::isnan(y) || std::isnan(z)) {
-            RCLCPP_DEBUG(this->get_logger(), "rejected for nan in point(%f, %f, %f)\n", x, y, z);
+            RCLCPP_DEBUG(this->get_logger(), "rejected for nan in point(%f, %f, %f)", x, y, z);
             continue;
         }
 
@@ -189,5 +179,6 @@ void LaserscanVirtualizer::pointcloud_to_laserscan(
     virtual_scan_publishers[pub_index]->publish(output);
 }
 } // namespace ira_laser_tools
+
 #include <rclcpp_components/register_node_macro.hpp>
 RCLCPP_COMPONENTS_REGISTER_NODE(ira_laser_tools::LaserscanVirtualizer)

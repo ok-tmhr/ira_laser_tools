@@ -27,20 +27,6 @@ find_package(message_filters REQUIRED)
 find_package(generate_parameter_library REQUIRED)
 find_package(rclcpp_components REQUIRED)
 
-set(dependencies
-  rclcpp
-  rclcpp_action
-  rclcpp_lifecycle
-  std_msgs
-  geometry_msgs
-  sensor_msgs
-  tf2
-  tf2_geometry_msgs
-  tf2_ros
-  rcl_interfaces
-  rclcpp_components
-)
-
 
 # bugfix for g++-Warning
 #   "<command-line>:0:0: warning: missing whitespace after the macro name"
@@ -75,8 +61,14 @@ rclcpp_components_register_node(
 )
 
 add_library(laserscan_virtualizer_component SHARED src/laserscan_virtualizer.cpp)
-ament_target_dependencies(laserscan_virtualizer_component ${dependencies})
-target_link_libraries(laserscan_virtualizer_component laserscan_virtualizer_parameter)
+target_link_libraries(laserscan_virtualizer_component laserscan_virtualizer_parameter
+rclcpp::rclcpp
+rclcpp_components::component
+  message_filters::message_filters
+  tf2::tf2
+  tf2_ros::tf2_ros
+  ${sensor_msgs_TARGETS}
+)
 
 rclcpp_components_register_node(
   laserscan_virtualizer_component
