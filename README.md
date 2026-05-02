@@ -60,3 +60,7 @@ For any questions, please contact us at furlan@disco.unimib.it or augusto.ballar
 [Paper](https://arxiv.org/abs/1411.1086)
 
 Originally compiled under catkin in hydro/indigo and used PCL 1.7
+
+## License
+
+This package is distributed under the BSD 3-Clause License. See [LICENSE](LICENSE).
