@@ -1,31 +1,26 @@
 <?xml version="1.0"?>
 <package format="3">
   <name>ira_laser_tools</name>
-  <version>2.0.7</version>
-  <description>The ira_laser_tools package. These nodes are meant to provide some utils for lasers, like listen to different laser scan sources and merge them in a single scan or generate virtual laser scans from a pointcloud.</description>
+  <version>0.1.0</version>
+  <description>The ira_laser_tools package. These nodes are meant to provide some utils for lasers,
+    like listen to different laser scan sources and merge them in a single scan or generate virtual
+    laser scans from a pointcloud.</description>
 
   <url>http://www.ros.org/wiki/ira_laser_tools</url>
-  <maintainer email="augusto.ballardini@unimib.it">Augusto</maintainer>
-  <maintainer email="p.colombo45@campus.unimib.it">Pietro</maintainer>
-  <maintainer email="f.delia2@campus.unimib.it">Fabio</maintainer>
+  <maintainer email="tomohiro.oku2023@gmail.com">Tomohiro Oku</maintainer>
 
-  <license>BSD</license>
+  <license>BSD-3-Clause</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
+  <buildtool_depend>generate_parameter_library</buildtool_depend>
 
-  <depend>sensor_msgs</depend>
-  <depend>libpcl-all-dev</depend>
-  <depend>pcl_ros</depend>
-  <depend>geometry_msgs</depend>
-  <depend>std_msgs</depend>
-  <depend>tf2</depend>
-  <depend>tf2_ros</depend>
-  <depend>laser_geometry</depend>
+  <depend>message_filters</depend>
   <depend>rclcpp</depend>
-  <depend>rclcpp_action</depend>
-  <depend>rclcpp_lifecycle</depend>
-  <!-- Needed to work around https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=894656 on Debian Stretch -->
-  <exec_depend>rosidl_default_runtime</exec_depend>
+  <depend>rclcpp_components</depend>
+  <depend>sensor_msgs</depend>
+  <depend>tf2</depend>
+  <depend>tf2_geometry_msgs</depend>
+  <depend>tf2_ros</depend>
 
   <export>
     <build_type>ament_cmake</build_type>

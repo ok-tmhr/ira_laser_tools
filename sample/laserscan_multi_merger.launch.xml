@@ -1,0 +1,26 @@
+<?xml version="1.0"?>
+<launch>
+  <arg name="use_sim_time" default="false" description="Use simulated clock if true." />
+  <arg name="log_level" default="info" description="ROS logger level for the node." />
+  <arg name="namespace" default="" description="Namespace to launch the node into." />
+
+  <node pkg="ira_laser_tools" name="laserscan_multi_merger" exec="laserscan_multi_merger"
+    namespace="$(var namespace)"
+    output="screen" ros_args="--log-level $(var log_level)">
+    <param name="destination_frame" value="base_link" />
+    <param name="cloud_destination_topic" value="/merged_cloud" />
+    <param name="scan_destination_topic" value="/scan_multi" />
+    <param name="laserscan_topics" value="[/scan1, /scan2]" type="list_of_str" />
+    <!-- LIST OF THE LASER SCAN TOPICS TO SUBSCRIBE -->
+    <param name="publish_pointcloud" value="true" />
+    <param name="queue_size" value="10" />
+    <param name="time_increment" value="0.0" />
+    <param name="angle_min" value="-3.14" />
+    <param name="angle_max" value="3.14" />
+    <param name="angle_increment" value="0.00437" />
+    <param name="scan_time" value="0.0" />
+    <param name="range_min" value="0.1" />
+    <param name="range_max" value="2.0" />
+    <param name="use_sim_time" value="$(var use_sim_time)" />
+  </node>
+</launch>

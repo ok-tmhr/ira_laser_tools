@@ -1,0 +1,21 @@
+<launch>
+
+  <node pkg="tf2_ros" exec="static_transform_publisher" name="ira_static_broadcaster1"
+    args="--yaw 0.3 --frame-id base_link --child-frame-id scan1" />
+  <node pkg="tf2_ros" exec="static_transform_publisher" name="ira_static_broadcaster2"
+    args="--frame-id base_link --child-frame-id scan2" />
+
+  <node pkg="ira_laser_tools" name="laserscan_virtualizer" exec="laserscan_virtualizer"
+    output="screen">
+    <param name="cloud_topic" value="/trunk4_camera_depth_camera/points" />
+    <param name="base_frame" value="base_link" />
+    <param name="output_laser_topic" value="/scan" />
+    <param name="virtual_laser_scan" value="scan1 scan2" value-sep=" " />
+    <param name="angle_min" value="-3.14" />
+    <param name="angle_max" value="3.14" />
+    <param name="angle_increment" value="0.00437" />
+    <param name="scan_time" value="0.0" />
+    <param name="range_min" value="0.1" />
+    <param name="range_max" value="2.0" />
+  </node>
+</launch>

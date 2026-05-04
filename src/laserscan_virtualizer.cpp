@@ -1,310 +1,181 @@
-#include <string.h>
+#include <cmath>
+#include <string>
 #include <vector>
-#include <Eigen/Dense>
+
 #include <geometry_msgs/msg/transform_stamped.hpp>
-#include <tf2_ros/transform_listener.h>
-#include <tf2_ros/buffer.h>
-#include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
-#include <laser_geometry/laser_geometry.hpp>
-#include <pcl/point_cloud.h>
-#include <pcl/point_types.h>
-#include <pcl/io/pcd_io.h>
-#include "rclcpp/rclcpp.hpp"
-#include <pcl_conversions/pcl_conversions.h>
-#include "rcl_interfaces/msg/set_parameters_result.hpp"
-#include "sensor_msgs/msg/laser_scan.hpp"
-#include "pcl_ros/transforms.hpp"
+#include <message_filters/subscriber.hpp>
+#include <rclcpp/node.hpp>
+#include <rclcpp/node_options.hpp>
+#include <sensor_msgs/msg/laser_scan.hpp>
+#include <sensor_msgs/msg/point_cloud2.hpp>
+#include <sensor_msgs/point_cloud2_iterator.hpp>
+#include <tf2/LinearMath/Transform.hpp>
+#include <tf2_ros/buffer.hpp>
+#include <tf2_ros/create_timer_ros.hpp>
+#include <tf2_ros/message_filter.hpp>
+#include <tf2_ros/transform_listener.hpp>
 
-typedef pcl::PointCloud<pcl::PointXYZ> myPointCloud;
+#include "ira_laser_tools/laserscan_virtualizer_parameter.hpp"
 
-using namespace std;
-using namespace pcl;
+using std::placeholders::_1;
+using PointCloud2 = sensor_msgs::msg::PointCloud2;
 
+namespace ira_laser_tools
+{
 class LaserscanVirtualizer : public rclcpp::Node
 {
 public:
-	LaserscanVirtualizer();
-	void pointcloud_to_laserscan(Eigen::MatrixXf points, pcl::PCLHeader scan_header, int pub_index);
-	void pointCloudCallback(sensor_msgs::msg::PointCloud2::SharedPtr pcl_in);
-	rcl_interfaces::msg::SetParametersResult reconfigureCallback(const std::vector<rclcpp::Parameter> &parameters);
+    LaserscanVirtualizer(const rclcpp::NodeOptions& options = rclcpp::NodeOptions());
+    void pointcloud_to_laserscan(
+        const PointCloud2::ConstSharedPtr& pcl_in,
+        const tf2::Transform& transform,
+        const std::string& output_frame,
+        const int pub_index);
+    void pointCloudCallback(const PointCloud2::ConstSharedPtr& pcl_in);
 
 private:
-	std::shared_ptr<tf2_ros::TransformListener> tfListener_;
-	std::unique_ptr<tf2_ros::Buffer> tf_buffer_;
-	std::vector<tf2::Stamped<tf2::Transform>> transform_;
-	OnSetParametersCallbackHandle::SharedPtr param_callback_handle_;
+    void virtual_laser_scan_parser();
 
-	rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr point_cloud_subscription_;
-	std::vector<rclcpp::Publisher<sensor_msgs::msg::LaserScan>::SharedPtr> virtual_scan_publishers;
-	std::vector<string> output_frames;
-
-	void virtual_laser_scan_parser();
-
-	double angle_min;
-	double angle_max;
-	double angle_increment;
-	double time_increment;
-	double scan_time;
-	double range_min;
-	double range_max;
-
-	string cloud_frame;
-	string base_frame;
-	string cloud_topic;
-	string output_laser_topic;
-	string virtual_laser_scan;
+    std::shared_ptr<laserscan_virtualizer::ParamListener> param_listener_;
+    std::shared_ptr<tf2_ros::TransformListener> tfListener_;
+    std::unique_ptr<tf2_ros::Buffer> tf_buffer_;
+    std::shared_ptr<message_filters::Subscriber<PointCloud2>> cloud_sub_;
+    std::shared_ptr<tf2_ros::MessageFilter<PointCloud2>> filter_;
+    std::vector<rclcpp::Publisher<sensor_msgs::msg::LaserScan>::SharedPtr> virtual_scan_publishers;
+    std::vector<tf2::Transform> transform_;
+    laserscan_virtualizer::Params params_;
+    std::string cloud_frame_;
 };
-
-rcl_interfaces::msg::SetParametersResult LaserscanVirtualizer::reconfigureCallback(const std::vector<rclcpp::Parameter> &parameters)
-{
-	rcl_interfaces::msg::SetParametersResult result;
-
-	for (auto parameter : parameters)
-	{
-		const auto &type = parameter.get_type();
-		const auto &name = parameter.get_name();
-
-		// Make sure it is a double value
-		if (type == rcl_interfaces::msg::ParameterType::PARAMETER_DOUBLE)
-		{
-			double value = parameter.as_double();
-
-			if (name == "angle_min")
-			{
-				this->angle_min = value;
-			}
-			else if (name == "angle_max")
-			{
-				this->angle_max = value;
-			}
-			else if (name == "angle_increment")
-			{
-				this->angle_increment = value;
-			}
-			else if (name == "time_increment")
-			{
-				this->time_increment = value;
-			}
-			else if (name == "scan_time")
-			{
-				this->scan_time = value;
-			}
-			else if (name == "range_min")
-			{
-				this->range_min = value;
-			}
-			else if (name == "range_max")
-			{
-				this->range_max = value;
-			}
-		}
-	}
-
-	result.successful = true;
-	return result;
-}
 
 void LaserscanVirtualizer::virtual_laser_scan_parser()
 {
-	// LaserScan frames to use for virtualization
-	istringstream iss(virtual_laser_scan);
-	std::vector<string> tokens;
-	copy(istream_iterator<string>(iss), istream_iterator<string>(), back_inserter<std::vector<string>>(tokens));
+    const auto num_topics = params_.virtual_laser_scan.size();
 
-	std::vector<string> tmp_output_frames;
+    virtual_scan_publishers.clear();
+    filter_.reset();
+    virtual_scan_publishers.reserve(num_topics);
 
-	for (std::vector<int>::size_type i = 0; i < tokens.size(); i++)
-	{
-		auto beg = this->get_clock()->now();
-		if (tf_buffer_->canTransform(base_frame, tokens[i], rclcpp::Time(0), rclcpp::Duration(1, 0))) // Check if TF knows the transform from this frame reference to base_frame reference
-		{
-			cout << "Elapsed: " << (this->get_clock()->now() - beg).nanoseconds() / 1e9 << endl;
-			cout << "Adding: " << tokens[i] << endl;
-			tmp_output_frames.push_back(tokens[i]);
-		}
-		else
-		{
-			cout << "Can't transform: '" << tokens[i] + "' to '" << base_frame << "'" << endl;
-		}
-	}
+    cloud_sub_ = std::make_shared<message_filters::Subscriber<PointCloud2>>(
+        this, params_.cloud_topic, rclcpp::SensorDataQoS().get_rmw_qos_profile());
+    filter_ = std::make_shared<tf2_ros::MessageFilter<PointCloud2>>(
+        *cloud_sub_, *tf_buffer_, params_.base_frame, 10,
+        this->get_node_logging_interface(), this->get_node_clock_interface(), std::chrono::seconds(1));
+    filter_->registerCallback(std::bind(&LaserscanVirtualizer::pointCloudCallback, this, _1));
 
-	// Sort and remove duplicates
-	sort(tmp_output_frames.begin(), tmp_output_frames.end());
-	std::vector<string>::iterator last = std::unique(tmp_output_frames.begin(), tmp_output_frames.end());
-	tmp_output_frames.erase(last, tmp_output_frames.end());
-
-	// Do not re-advertize if the topics are the same
-	if ((tmp_output_frames.size() != output_frames.size()) || !equal(tmp_output_frames.begin(), tmp_output_frames.end(), output_frames.begin()))
-	{
-		cloud_frame = "";
-
-		output_frames = tmp_output_frames;
-		if (output_frames.size() > 0)
-		{
-			virtual_scan_publishers.resize(output_frames.size());
-			RCLCPP_INFO(this->get_logger(), "Publishing: %ld virtual scans", virtual_scan_publishers.size());
-			cout << "Advertising topics: " << endl;
-			for (std::vector<int>::size_type i = 0; i < output_frames.size(); ++i)
-			{
-				if (output_laser_topic.empty())
-				{
-					virtual_scan_publishers[i] = this->create_publisher<sensor_msgs::msg::LaserScan>(output_frames[i].c_str(), rclcpp::SensorDataQoS());
-					cout << "\t\t" << output_frames[i] << " on topic " << output_frames[i].c_str() << endl;
-				}
-				else
-				{
-					virtual_scan_publishers[i] = this->create_publisher<sensor_msgs::msg::LaserScan>(output_laser_topic.c_str(), rclcpp::SensorDataQoS());
-					cout << "\t\t" << output_frames[i] << " on topic " << output_laser_topic.c_str() << endl;
-				}
-			}
-		}
-		else
-		{
-			RCLCPP_INFO(this->get_logger(), "Not publishing to any topic.");
-		}
-	}
+    RCLCPP_INFO(this->get_logger(), "Publishing: %ld virtual scans", num_topics);
+    for (const auto& t : params_.virtual_laser_scan) {
+        const auto topic = params_.output_laser_topic.empty() ? t : params_.output_laser_topic;
+        const auto pub = this->create_publisher<sensor_msgs::msg::LaserScan>(topic, rclcpp::SensorDataQoS());
+        virtual_scan_publishers.push_back(pub);
+        RCLCPP_INFO(this->get_logger(), "%s on topic %s", t.c_str(), pub->get_topic_name());
+    }
 }
 
-LaserscanVirtualizer::LaserscanVirtualizer() : Node("laserscan_virtualizer")
+LaserscanVirtualizer::LaserscanVirtualizer(const rclcpp::NodeOptions& options) : Node("laserscan_virtualizer", options), cloud_frame_("")
 {
-	this->declare_parameter<std::string>("base_frame", "base_link");
-	this->declare_parameter<std::string>("cloud_topic", "/cloud_pcd");
-	this->declare_parameter<std::string>("output_laser_topic", "/scan");
-	this->declare_parameter<std::string>("virtual_laser_scan", "scansx scandx");
-	this->declare_parameter("angle_min", -3.14);
-	this->declare_parameter("angle_max", 3.14);
-	this->declare_parameter("angle_increment", 0.0058);
-	this->declare_parameter("scan_time", 0.0);
-	this->declare_parameter("range_min", 0.0);
-	this->declare_parameter("range_max", 25.0);
+    param_listener_ = std::make_shared<laserscan_virtualizer::ParamListener>(get_node_parameters_interface(), get_logger());
+    param_listener_->setUserCallback([this](const laserscan_virtualizer::Params& new_params) {
+        params_ = new_params;
+        // Re-parse virtual laser scan if changed
+        this->virtual_laser_scan_parser();
+    });
 
-	this->get_parameter("base_frame", base_frame);
-	this->get_parameter("cloud_topic", cloud_topic);
-	this->get_parameter("output_laser_topic", output_laser_topic);
-	this->get_parameter("virtual_laser_scan", virtual_laser_scan);
-	this->get_parameter("angle_min", angle_min);
-	this->get_parameter("angle_max", angle_max);
-	this->get_parameter("angle_increment", angle_increment);
-	this->get_parameter("scan_time", scan_time);
-	this->get_parameter("range_min", range_min);
-	this->get_parameter("range_max", range_max);
-
-	param_callback_handle_ = this->add_on_set_parameters_callback(
-			std::bind(&LaserscanVirtualizer::reconfigureCallback, this, std::placeholders::_1));
-
-	tf_buffer_ = std::make_unique<tf2_ros::Buffer>(this->get_clock());
-	tfListener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
-
-	this->virtual_laser_scan_parser();
-
-	point_cloud_subscription_ =
-			this->create_subscription<sensor_msgs::msg::PointCloud2>(cloud_topic.c_str(), rclcpp::SensorDataQoS(), std::bind(&LaserscanVirtualizer::pointCloudCallback, this, std::placeholders::_1));
-	cloud_frame = "";
+    params_ = param_listener_->get_params();
+    tf_buffer_ = std::make_unique<tf2_ros::Buffer>(this->get_clock());
+    tf_buffer_->setCreateTimerInterface(std::make_shared<tf2_ros::CreateTimerROS>(this->get_node_base_interface(), this->get_node_timers_interface()));
+    tfListener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
+    this->virtual_laser_scan_parser();
 }
 
-void LaserscanVirtualizer::pointCloudCallback(sensor_msgs::msg::PointCloud2::SharedPtr pcl_in)
+void LaserscanVirtualizer::pointCloudCallback(const PointCloud2::ConstSharedPtr& pcl_in)
 {
-	if (cloud_frame.empty())
-	{
-		cloud_frame = (*pcl_in).header.frame_id;
-		transform_.resize(output_frames.size());
-		for (std::vector<int>::size_type i = 0; i < output_frames.size(); i++)
-		{
-			if (tf_buffer_->canTransform(output_frames[i], cloud_frame, rclcpp::Time(0), rclcpp::Duration(2, 0)))
-			{
-				geometry_msgs::msg::TransformStamped tfGeom = tf_buffer_->lookupTransform(output_frames[i], cloud_frame, rclcpp::Time(0));
+    const auto& output_frames = params_.virtual_laser_scan;
+    if (cloud_frame_.empty()) {
+        cloud_frame_ = pcl_in->header.frame_id;
+        transform_.resize(output_frames.size());
+        for (size_t i = 0; i < output_frames.size(); i++) {
+            try {
+                const auto tfGeom = tf_buffer_->lookupTransform(output_frames[i], cloud_frame_, pcl_in->header.stamp);
+                tf2::fromMsg(tfGeom.transform, transform_[i]);
+            } catch (const std::exception& e) {
+                RCLCPP_WARN(this->get_logger(), "Could not transform scan from frame '%s' to frame '%s': %s", cloud_frame_.c_str(), output_frames[i].c_str(), e.what());
+                return;
+            }
+        }
+    }
 
-				tf2::convert(tfGeom, transform_[i]);
-			}
-		}
-	}
-
-	for (std::vector<int>::size_type i = 0; i < output_frames.size(); i++)
-	{
-		myPointCloud pcl_out, tmpPcl;
-		pcl::PCLPointCloud2 tmpPcl2;
-
-		pcl_conversions::toPCL(*pcl_in, tmpPcl2);
-		pcl::fromPCLPointCloud2(tmpPcl2, tmpPcl);
-
-		// Initialize the header of the temporary pointcloud, needed to rototranslate the three points that define our plane
-		// It shall be equal to the input point cloud's one, changing only the 'frame_id'
-		string tmpFrame = output_frames[i];
-		pcl_out.header = tmpPcl.header;
-
-		// Ask tf to rototranslate the velodyne pointcloud to base_frame reference
-		pcl_ros::transformPointCloud(tmpPcl, pcl_out, transform_[i]);
-		pcl_out.header.frame_id = tmpFrame;
-
-		// Transform the pcl into eigen matrix
-		Eigen::MatrixXf tmpEigenMatrix;
-		pcl::toPCLPointCloud2(pcl_out, tmpPcl2);
-		pcl::getPointCloudAsEigen(tmpPcl2, tmpEigenMatrix);
-
-		// Extract the points close to the z=0 plane, convert them into a laser-scan message and publish it
-		pointcloud_to_laserscan(tmpEigenMatrix, pcl_out.header, i);
-	}
+    for (size_t i = 0; i < output_frames.size(); i++) {
+        pointcloud_to_laserscan(pcl_in, transform_[i], output_frames[i], i);
+    }
 }
 
-void LaserscanVirtualizer::pointcloud_to_laserscan(Eigen::MatrixXf points, pcl::PCLHeader scan_header, int pub_index) // pcl::PCLPointCloud2 *merged_cloud)
+void LaserscanVirtualizer::pointcloud_to_laserscan(
+    const sensor_msgs::msg::PointCloud2::ConstSharedPtr& pcl_in,
+    const tf2::Transform& transform,
+    const std::string& output_frame,
+    const int pub_index)
 {
-	sensor_msgs::msg::LaserScan output;
-	output.header = pcl_conversions::fromPCL(scan_header);
-	output.angle_min = this->angle_min;
-	output.angle_max = this->angle_max;
-	output.angle_increment = this->angle_increment;
-	output.time_increment = this->time_increment;
-	output.scan_time = this->scan_time;
-	output.range_min = this->range_min;
-	output.range_max = this->range_max;
+    sensor_msgs::msg::LaserScan output;
+    output.header = pcl_in->header;
+    output.header.frame_id = output_frame;
+    output.angle_min = params_.angle_min;
+    output.angle_max = params_.angle_max;
+    output.angle_increment = params_.angle_increment;
+    output.time_increment = 0.0; // params_.time_increment; // Not used in original
+    output.scan_time = params_.scan_time;
+    output.range_min = params_.range_min;
+    output.range_max = params_.range_max;
 
-	uint32_t ranges_size = std::ceil((output.angle_max - output.angle_min) / output.angle_increment);
-	output.ranges.assign(ranges_size, output.range_max + 1.0);
+    uint32_t ranges_size = std::ceil((output.angle_max - output.angle_min) / output.angle_increment);
+    output.ranges.assign(ranges_size, output.range_max + 1.0);
 
-	for (int i = 0; i < points.cols(); i++)
-	{
-		const float &x = points(0, i);
-		const float &y = points(1, i);
-		const float &z = points(2, i);
+    sensor_msgs::PointCloud2ConstIterator<float> iter_x(*pcl_in, "x");
+    sensor_msgs::PointCloud2ConstIterator<float> iter_y(*pcl_in, "y");
+    sensor_msgs::PointCloud2ConstIterator<float> iter_z(*pcl_in, "z");
 
-		if (std::isnan(x) || std::isnan(y) || std::isnan(z))
-		{
-			RCLCPP_DEBUG(this->get_logger(), "rejected for nan in point(%f, %f, %f)\n", x, y, z);
-			continue;
-		}
+    for (; iter_x != iter_x.end(); ++iter_x, ++iter_y, ++iter_z) {
+        float x = *iter_x;
+        float y = *iter_y;
+        float z = *iter_z;
 
-		double range_sq = pow(y, 2) + pow(x, 2);
-		double range_min_sq_ = output.range_min * output.range_min;
-		if (range_sq < range_min_sq_)
-		{
-			RCLCPP_DEBUG(this->get_logger(), "rejected for range %f below minimum value %f. Point: (%f, %f, %f)", range_sq, range_min_sq_, x, y, z);
-			continue;
-		}
+        if (std::isnan(x) || std::isnan(y) || std::isnan(z)) {
+            RCLCPP_DEBUG(this->get_logger(), "rejected for nan in point(%f, %f, %f)", x, y, z);
+            continue;
+        }
 
-		double angle = atan2(y, x);
-		if (angle < output.angle_min || angle > output.angle_max)
-		{
-			RCLCPP_DEBUG(this->get_logger(), "rejected for angle %f not in range (%f, %f)\n", angle, output.angle_min, output.angle_max);
-			continue;
-		}
+        tf2::Vector3 point(x, y, z);
+        tf2::Vector3 transformed = transform * point;
+        double tx = transformed.x();
+        double ty = transformed.y();
+        double tz = transformed.z();
 
-		int index = (angle - output.angle_min) / output.angle_increment;
-		if (output.ranges[index] * output.ranges[index] > range_sq)
-		{
-			output.ranges[index] = sqrt(range_sq);
-		}
-	}
+        double range_sq = tx * tx + ty * ty;
+        double range_min_sq_ = output.range_min * output.range_min;
+        if (range_sq < range_min_sq_) {
+            RCLCPP_DEBUG(this->get_logger(), "rejected for range %f below minimum value %f. Point: (%f, %f, %f)", range_sq, range_min_sq_, tx, ty, tz);
+            continue;
+        }
 
-	virtual_scan_publishers[pub_index]->publish(output);
+        double angle = atan2(ty, tx);
+        if (angle < output.angle_min || angle > output.angle_max) {
+            RCLCPP_DEBUG(this->get_logger(), "rejected for angle %f not in range (%f, %f)", angle, output.angle_min, output.angle_max);
+            continue;
+        }
+
+        int index = static_cast<int>((angle - output.angle_min) / output.angle_increment);
+        if (index < 0 || static_cast<uint32_t>(index) >= ranges_size) {
+            continue;
+        }
+
+        double existing_range_sq = output.ranges[index] * output.ranges[index];
+        if (existing_range_sq > range_sq) {
+            output.ranges[index] = std::sqrt(range_sq);
+        }
+    }
+
+    virtual_scan_publishers[pub_index]->publish(output);
 }
+} // namespace ira_laser_tools
 
-int main(int argc, char **argv)
-{
-	rclcpp::init(argc, argv);
-
-	rclcpp::spin(std::make_shared<LaserscanVirtualizer>());
-
-	rclcpp::shutdown();
-
-	return 0;
-}
+#include <rclcpp_components/register_node_macro.hpp>
+RCLCPP_COMPONENTS_REGISTER_NODE(ira_laser_tools::LaserscanVirtualizer)

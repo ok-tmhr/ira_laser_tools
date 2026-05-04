@@ -1,0 +1,79 @@
+laserscan_multi_merger:
+  destination_frame:
+    type: string
+    default_value: cart_frame
+    description: Target frame for merged LaserScan output
+    validation:
+      not_empty<>: null
+  cloud_destination_topic:
+    type: string
+    default_value: /merged_cloud
+    description: Topic name for publishing merged PointCloud2 output
+    validation:
+      not_empty<>: null
+  scan_destination_topic:
+    type: string
+    default_value: /scan_multi
+    description: Topic name for publishing merged LaserScan output
+    validation:
+      not_empty<>: null
+  laserscan_topics:
+    type: string_array
+    default_value: [ /scan1, /scan2 ]
+    description: List of input LaserScan topic names (must contain 2-4 topics)
+    validation:
+      unique<>: null
+      size_gt<>: 1
+      size_lt<>: 5
+  angle_min:
+    type: double
+    default_value: -3.14
+    description: Minimum angle of merged scan (radians)
+    validation:
+      bounds<>: [ -3.141592653589793, 3.141592653589793 ]
+  angle_max:
+    type: double
+    default_value: 3.14
+    description: Maximum angle of merged scan (radians)
+    validation:
+      bounds<>: [ -3.141592653589793, 3.141592653589793 ]
+  angle_increment:
+    type: double
+    default_value: 0.0058
+    description: Angular resolution of merged scan (radians)
+    validation:
+      gt<>: [ 0.0 ]
+  scan_time:
+    type: double
+    default_value: 0.0
+    description: Time duration of a complete scan (seconds)
+    validation:
+      gt_eq<>: [ 0.0 ]
+  range_min:
+    type: double
+    default_value: 0.0
+    description: Minimum valid range for measurements (meters)
+    validation:
+      gt_eq<>: [ 0.0 ]
+  range_max:
+    type: double
+    default_value: 25.0
+    description: Maximum valid range for measurements (meters)
+    validation:
+      gt_eq<>: [ 0.0 ]
+  queue_size:
+    type: int
+    default_value: 10
+    description: Queue size for message filters and synchronizers
+    validation:
+      gt<>: [ 0 ]
+  time_increment:
+    type: double
+    default_value: 0.0
+    description: Time between angle measurements (seconds)
+    validation:
+      gt_eq<>: [ 0.0 ]
+  publish_pointcloud:
+    type: bool
+    default_value: true
+    description: Enable publishing of merged PointCloud2 output

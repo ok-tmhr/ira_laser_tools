@@ -1,0 +1,60 @@
+laserscan_virtualizer:
+  base_frame:
+    type: string
+    default_value: base_link
+    description: Reference frame which laser(s) are related to
+    validation:
+      not_empty<>: null
+  cloud_topic:
+    type: string
+    default_value: /cloud_pcd
+    description: Input point cloud topic
+    validation:
+      not_empty<>: null
+  output_laser_topic:
+    type: string
+    default_value: /scan
+    description: Virtual laser output topic, leave empty to publish on virtual laser names
+  virtual_laser_scan:
+    type: string_array
+    default_value: [ scan1, scan2 ]
+    description: List of virtual laser scan frames
+    validation:
+      not_empty<>: null
+      unique<>: null
+  angle_min:
+    type: double
+    default_value: -3.14
+    description: Minimum angle of virtual scan (radians)
+    validation:
+      bounds<>: [ -3.141592653589793, 3.141592653589793 ]
+  angle_max:
+    type: double
+    default_value: 3.14
+    description: Maximum angle of virtual scan (radians)
+    validation:
+      bounds<>: [ -3.141592653589793, 3.141592653589793 ]
+  angle_increment:
+    type: double
+    default_value: 0.0058
+    description: Angular resolution of virtual scan (radians)
+    validation:
+      gt<>: [ 0.0 ]
+  scan_time:
+    type: double
+    default_value: 0.0
+    description: Time duration of a complete scan (seconds)
+    validation:
+      gt_eq<>: [ 0.0 ]
+  range_min:
+    type: double
+    default_value: 0.0
+    description: Minimum valid range for measurements (meters)
+    validation:
+      gt_eq<>: [ 0.0 ]
+  range_max:
+    type: double
+    default_value: 25.0
+    description: Maximum valid range for measurements (meters)
+    validation:
+      gt_eq<>: [ 0.0 ]
