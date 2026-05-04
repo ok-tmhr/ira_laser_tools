@@ -24,7 +24,7 @@ def generate_launch_description() -> LaunchDescription:
                 description="ROS logger level for the container.",
             ),
             DeclareLaunchArgument(
-                "ns",
+                "namespace",
                 default_value="",
                 description="Namespace to launch the component into.",
             ),
@@ -43,7 +43,7 @@ def generate_launch_description() -> LaunchDescription:
                         package="ira_laser_tools",
                         plugin="ira_laser_tools::LaserscanMerger",
                         name="laserscan_merger",
-                        namespace=LaunchConfiguration("ns"),
+                        namespace=LaunchConfiguration("namespace"),
                         parameters=[
                             LaunchConfiguration("params_file"),
                             {"use_sim_time": LaunchConfiguration("use_sim_time")},

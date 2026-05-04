@@ -1,20 +1,20 @@
 import launch
-from ament_index_python import get_package_share_path
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
+from launch_ros.substitutions import FindPackageShare
 
 
 def generate_launch_description() -> LaunchDescription:
     params_file = (
-        get_package_share_path("ira_laser_tools") / "config" / "ira_laser_tools.yaml"
+        FindPackageShare("ira_laser_tools") / "config" / "ira_laser_tools.yaml"
     )
     return launch.LaunchDescription(
         [
             DeclareLaunchArgument(
                 "params_file",
-                default_value=params_file.as_posix(),
+                default_value=params_file,
                 description="Optional YAML parameter file for laserscan_multi_merger.",
             ),
             Node(

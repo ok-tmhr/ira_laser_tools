@@ -1,20 +1,20 @@
 <?xml version="1.0"?>
 <launch>
-    <arg name="use_sim_time" default="false" description="Use simulated clock if true." />
-    <arg name="log_level" default="info" description="ROS logger level for the container." />
-    <arg name="ns" default="" description="Namespace to launch the component into." />
-    <arg name="params_file"
-        default="$(find-pkg-share ira_laser_tools)/config/ira_laser_tools.yaml"
-        description="Optional YAML parameter file for LaserscanMerger." />
+  <arg name="use_sim_time" default="false" description="Use simulated clock if true." />
+  <arg name="log_level" default="info" description="ROS logger level for the container." />
+  <arg name="namespace" default="" description="Namespace to launch the component into." />
+  <arg name="params_file"
+    default="$(find-pkg-share ira_laser_tools)/config/ira_laser_tools.yaml"
+    description="Optional YAML parameter file for LaserscanMerger." />
 
-    <node_container pkg="rclcpp_components" exec="component_container" name="laserscan_container"
-        namespace="" ros_args="--log-level $(var log_level)">
-        <composable_node pkg="ira_laser_tools" plugin="ira_laser_tools::LaserscanMerger"
-            name="laserscan_merger"
-            namespace="$(var ns)">
-            <param from="$(var params_file)" />
-            <param name="use_sim_time" value="$(var use_sim_time)" />
-            <extra_arg name="use_intra_process_comms" value="true" />
-        </composable_node>
-    </node_container>
+  <node_container pkg="rclcpp_components" exec="component_container" name="laserscan_container"
+    namespace="" ros_args="--log-level $(var log_level)">
+    <composable_node pkg="ira_laser_tools" plugin="ira_laser_tools::LaserscanMerger"
+      name="laserscan_merger"
+      namespace="$(var namespace)">
+      <param from="$(var params_file)" />
+      <param name="use_sim_time" value="$(var use_sim_time)" />
+      <extra_arg name="use_intra_process_comms" value="true" />
+    </composable_node>
+  </node_container>
 </launch>

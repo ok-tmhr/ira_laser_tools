@@ -8,7 +8,7 @@ launch:
       default: info
       description: ROS logger level for the container
   - arg:
-      name: ns
+      name: namespace
       default: ""
       description: Namespace to launch the component into
   - arg:
@@ -26,7 +26,7 @@ launch:
         - pkg: ira_laser_tools
           plugin: ira_laser_tools::LaserscanMerger
           name: laserscan_merger
-          namespace: $(var ns)
+          namespace: $(var namespace)
           param:
             - from: $(var params_file)
             - name: use_sim_time
