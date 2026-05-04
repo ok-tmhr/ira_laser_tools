@@ -30,7 +30,7 @@ public:
         const PointCloud2::ConstSharedPtr& pcl_in,
         const tf2::Transform& transform,
         const std::string& output_frame,
-        int pub_index);
+        const int pub_index);
     void pointCloudCallback(const PointCloud2::ConstSharedPtr& pcl_in);
 
 private:
@@ -63,19 +63,11 @@ void LaserscanVirtualizer::virtual_laser_scan_parser()
     filter_->registerCallback(std::bind(&LaserscanVirtualizer::pointCloudCallback, this, _1));
 
     RCLCPP_INFO(this->get_logger(), "Publishing: %ld virtual scans", num_topics);
-    if (params_.output_laser_topic.empty()) {
-        for (const auto& t : params_.virtual_laser_scan) {
-            const auto pub = this->create_publisher<sensor_msgs::msg::LaserScan>(t, rclcpp::SensorDataQoS());
-            virtual_scan_publishers.push_back(pub);
-            RCLCPP_INFO(this->get_logger(), "%s on topic %s", t.c_str(), pub->get_topic_name());
-        }
-    } else {
-        for (const auto& t : params_.virtual_laser_scan) {
-            const auto pub = this->create_publisher<sensor_msgs::msg::LaserScan>(params_.output_laser_topic, rclcpp::SensorDataQoS());
-            virtual_scan_publishers.push_back(
-                pub);
-            RCLCPP_INFO(this->get_logger(), "%s on topic %s", t.c_str(), pub->get_topic_name());
-        }
+    for (const auto& t : params_.virtual_laser_scan) {
+        const auto topic = params_.output_laser_topic.empty() ? t : params_.output_laser_topic;
+        const auto pub = this->create_publisher<sensor_msgs::msg::LaserScan>(topic, rclcpp::SensorDataQoS());
+        virtual_scan_publishers.push_back(pub);
+        RCLCPP_INFO(this->get_logger(), "%s on topic %s", t.c_str(), pub->get_topic_name());
     }
 }
 
@@ -102,8 +94,13 @@ void LaserscanVirtualizer::pointCloudCallback(const PointCloud2::ConstSharedPtr&
         cloud_frame_ = pcl_in->header.frame_id;
         transform_.resize(output_frames.size());
         for (size_t i = 0; i < output_frames.size(); i++) {
-            const auto tfGeom = tf_buffer_->lookupTransform(output_frames[i], cloud_frame_, pcl_in->header.stamp);
-            tf2::fromMsg(tfGeom.transform, transform_[i]);
+            try {
+                const auto tfGeom = tf_buffer_->lookupTransform(output_frames[i], cloud_frame_, pcl_in->header.stamp);
+                tf2::fromMsg(tfGeom.transform, transform_[i]);
+            } catch (const std::exception& e) {
+                RCLCPP_WARN(this->get_logger(), "Could not transform scan from frame '%s' to frame '%s': %s", cloud_frame_.c_str(), output_frames[i].c_str(), e.what());
+                return;
+            }
         }
     }
 
@@ -116,7 +113,7 @@ void LaserscanVirtualizer::pointcloud_to_laserscan(
     const sensor_msgs::msg::PointCloud2::ConstSharedPtr& pcl_in,
     const tf2::Transform& transform,
     const std::string& output_frame,
-    int pub_index)
+    const int pub_index)
 {
     sensor_msgs::msg::LaserScan output;
     output.header = pcl_in->header;
